@@ -1,0 +1,45 @@
+name: cafe_admin
+description: Cafe Admin Management App
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^3.3.0
+  cloud_firestore: ^5.3.0
+  firebase_storage: ^12.3.0
+
+  # State management
+  provider: ^6.1.2
+
+  # Navigation
+  go_router: ^14.2.7
+
+  # UI
+  google_fonts: ^6.2.1
+  fl_chart: ^0.69.0
+  cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
+
+  # Utils
+  intl: ^0.19.0
+  crypto: ^3.0.5
+  image_picker: ^1.1.2
+  uuid: ^4.4.2
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
