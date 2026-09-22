@@ -63,7 +63,7 @@ class DefaultFirebaseOptions {
     projectId: 'order-fa2b5',
     storageBucket: 'order-fa2b5.firebasestorage.app',
     messagingSenderId: '348886800909',
-    appId: '1:348886800909:ios:REPLACE_WITH_MACOS_APP_ID', // ← Thay thế
+    appId: '1:348886800909:ios:e88194961ca6e021b29344', // ← Thay thế
     iosBundleId: 'com.yourcompany.cafeAdmin', // ← Thay thế
   );
 }

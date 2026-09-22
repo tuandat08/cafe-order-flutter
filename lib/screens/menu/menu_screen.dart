@@ -46,25 +46,21 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Quản lý Menu'),
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
-            onPressed: () => _openForm(),
-            tooltip: 'Thêm món',
-          ),
-        ],
-      ),
+
       body: StreamBuilder<List<MenuItemModel>>(
         stream: _menuService.streamMenuItems(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Lỗi: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
+          }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           final items = snapshot.data!;
-          final categories = ['all', ...items.map((i) => i.category).toSet().toList()..sort()];
+          final categories = [
+            'all',
+            ...items.map((i) => i.category).toSet().toList()..sort()
+          ];
           final filtered = _selectedCategory == 'all'
               ? items
               : items.where((i) => i.category == _selectedCategory).toList();
@@ -76,7 +72,8 @@ class _MenuScreenState extends State<MenuScreen> {
                 height: 52,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   children: categories.map((cat) {
                     final selected = cat == _selectedCategory;
                     return Padding(
@@ -84,12 +81,17 @@ class _MenuScreenState extends State<MenuScreen> {
                       child: FilterChip(
                         label: Text(cat == 'all' ? 'Tất cả' : cat),
                         selected: selected,
-                        onSelected: (_) => setState(() => _selectedCategory = cat),
-                        selectedColor: AppColors.primary.withOpacity(0.15),
+                        onSelected: (_) =>
+                            setState(() => _selectedCategory = cat),
+                        selectedColor:
+                            AppColors.primary.withValues(alpha: 0.15),
                         checkmarkColor: AppColors.primary,
                         labelStyle: TextStyle(
-                          color: selected ? AppColors.primary : AppColors.textSecondary,
-                          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.normal,
                         ),
                       ),
                     );
@@ -103,10 +105,14 @@ class _MenuScreenState extends State<MenuScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.menu_book_outlined,
+                            Icon(Icons.restaurant_menu_rounded,
                                 size: 64, color: AppColors.divider),
-                            const SizedBox(height: 12),
-                            const Text('Chưa có món nào'),
+                            const SizedBox(height: 16),
+                            Text('Chưa có món nào',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                            const SizedBox(height: 4),
+                            Text('Nhấn + để thêm món mới',
+                              style: TextStyle(fontSize: 13, color: AppColors.textHint)),
                           ],
                         ),
                       )
@@ -153,8 +159,7 @@ class _MenuScreenState extends State<MenuScreen> {
               child: const Text('Huỷ')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style:
-                ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             child: const Text('Xóa'),
           ),
         ],
@@ -180,7 +185,12 @@ class _MenuItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fmt = NumberFormat('#,###', 'vi_VN');
-    return Card(
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEDE8E3)),
+      ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -196,13 +206,13 @@ class _MenuItemCard extends StatelessWidget {
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Container(
                           color: AppColors.background,
-                          child: const Icon(Icons.coffee,
+                          child: const Icon(Icons.coffee_rounded,
                               size: 48, color: AppColors.divider),
                         ),
                       )
                     : Container(
                         color: AppColors.background,
-                        child: const Icon(Icons.coffee,
+                        child: const Icon(Icons.coffee_rounded,
                             size: 48, color: AppColors.divider),
                       ),
                 if (!item.available)
@@ -225,10 +235,12 @@ class _MenuItemCard extends StatelessWidget {
                   child: Row(
                     children: [
                       _IconAction(
-                          icon: Icons.edit, onTap: onEdit, color: AppColors.info),
+                          icon: Icons.edit_rounded,
+                          onTap: onEdit,
+                          color: AppColors.info),
                       const SizedBox(width: 4),
                       _IconAction(
-                          icon: Icons.delete,
+                          icon: Icons.delete_rounded,
                           onTap: onDelete,
                           color: AppColors.error),
                     ],
@@ -282,7 +294,8 @@ class _IconAction extends StatelessWidget {
   final VoidCallback onTap;
   final Color color;
 
-  const _IconAction({required this.icon, required this.onTap, required this.color});
+  const _IconAction(
+      {required this.icon, required this.onTap, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -291,7 +304,7 @@ class _IconAction extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(5),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
+          color: Colors.white.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Icon(icon, size: 16, color: color),
@@ -335,7 +348,10 @@ class _MenuItemFormState extends State<_MenuItemForm> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16,
+        16,
+        16,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 16,
       ),
       child: Form(
         key: _formKey,
@@ -371,7 +387,8 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                       keyboardType: TextInputType.number,
                       validator: (v) {
                         if (v?.trim().isEmpty ?? true) return 'Nhập giá';
-                        if (double.tryParse(v!.trim()) == null) return 'Số không hợp lệ';
+                        if (double.tryParse(v!.trim()) == null)
+                          return 'Số không hợp lệ';
                         return null;
                       },
                     ),
@@ -380,7 +397,8 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                   Expanded(
                     child: TextFormField(
                       controller: _categoryCtrl,
-                      decoration: const InputDecoration(labelText: 'Danh mục *'),
+                      decoration:
+                          const InputDecoration(labelText: 'Danh mục *'),
                       validator: (v) =>
                           v?.trim().isEmpty ?? true ? 'Nhập danh mục' : null,
                     ),
@@ -396,7 +414,8 @@ class _MenuItemFormState extends State<_MenuItemForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _descCtrl,
-                decoration: const InputDecoration(labelText: 'Mô tả (tuỳ chọn)'),
+                decoration:
+                    const InputDecoration(labelText: 'Mô tả (tuỳ chọn)'),
                 maxLines: 2,
               ),
               const SizedBox(height: 20),

@@ -1,0 +1,40 @@
+PODS:
+  - Flutter (1.0.0)
+  - flutter_pos_printer_platform_image_3 (0.0.1):
+    - Flutter
+  - flutter_tts (0.0.1):
+    - Flutter
+  - network_info_plus (0.0.1):
+    - Flutter
+  - printing (1.0.0):
+    - Flutter
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - flutter_pos_printer_platform_image_3 (from `.symlinks/plugins/flutter_pos_printer_platform_image_3/ios`)
+  - flutter_tts (from `.symlinks/plugins/flutter_tts/ios`)
+  - network_info_plus (from `.symlinks/plugins/network_info_plus/ios`)
+  - printing (from `.symlinks/plugins/printing/ios`)
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  flutter_pos_printer_platform_image_3:
+    :path: ".symlinks/plugins/flutter_pos_printer_platform_image_3/ios"
+  flutter_tts:
+    :path: ".symlinks/plugins/flutter_tts/ios"
+  network_info_plus:
+    :path: ".symlinks/plugins/network_info_plus/ios"
+  printing:
+    :path: ".symlinks/plugins/printing/ios"
+
+SPEC CHECKSUMS:
+  Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
+  flutter_pos_printer_platform_image_3: eef08e1aa2d1033970768ebdc530b5fafcdb46ff
+  flutter_tts: 35ac3c7d42412733e795ea96ad2d7e05d0a75113
+  network_info_plus: b6c3b27559bf719cc53ef571a947b3ac4629754c
+  printing: 54ff03f28fe9ba3aa93358afb80a8595a071dd07
+
+PODFILE CHECKSUM: 3ba3a73b1b12adcf321a227a745625fe0888cc82
+
+COCOAPODS: 1.17.0

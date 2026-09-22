@@ -13,10 +13,10 @@ class DiscountsScreen extends StatelessWidget {
 
     void openForm([DiscountModel? d]) {
       final codeCtrl = TextEditingController(text: d?.code);
-      final valueCtrl = TextEditingController(
-          text: d?.value.toStringAsFixed(0) ?? '');
-      final maxCtrl = TextEditingController(
-          text: d?.maxDiscount.toStringAsFixed(0) ?? '0');
+      final valueCtrl =
+          TextEditingController(text: d?.value.toStringAsFixed(0) ?? '');
+      final maxCtrl =
+          TextEditingController(text: d?.maxDiscount.toStringAsFixed(0) ?? '0');
       String type = d?.type ?? 'percent';
       bool active = d?.active ?? true;
 
@@ -29,7 +29,10 @@ class DiscountsScreen extends StatelessWidget {
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setSt) => Padding(
             padding: EdgeInsets.fromLTRB(
-              16, 16, 16, MediaQuery.of(ctx).viewInsets.bottom + 16,
+              16,
+              16,
+              16,
+              MediaQuery.of(ctx).viewInsets.bottom + 16,
             ),
             child: SingleChildScrollView(
               child: Column(
@@ -38,7 +41,8 @@ class DiscountsScreen extends StatelessWidget {
                 children: [
                   Text(
                     d == null ? 'Thêm mã giảm giá' : 'Chỉnh sửa mã',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 18),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -53,11 +57,14 @@ class DiscountsScreen extends StatelessWidget {
                       Expanded(
                         child: SegmentedButton<String>(
                           segments: const [
-                            ButtonSegment(value: 'percent', label: Text('% Phần trăm')),
-                            ButtonSegment(value: 'fixed', label: Text('đ Cố định')),
+                            ButtonSegment(
+                                value: 'percent', label: Text('% Phần trăm')),
+                            ButtonSegment(
+                                value: 'fixed', label: Text('đ Cố định')),
                           ],
                           selected: {type},
-                          onSelectionChanged: (s) => setSt(() => type = s.first),
+                          onSelectionChanged: (s) =>
+                              setSt(() => type = s.first),
                         ),
                       ),
                     ],
@@ -69,7 +76,9 @@ class DiscountsScreen extends StatelessWidget {
                         child: TextFormField(
                           controller: valueCtrl,
                           decoration: InputDecoration(
-                            labelText: type == 'percent' ? 'Giá trị (%)' : 'Giá trị (đ)',
+                            labelText: type == 'percent'
+                                ? 'Giá trị (%)'
+                                : 'Giá trị (đ)',
                           ),
                           keyboardType: TextInputType.number,
                         ),
@@ -144,7 +153,8 @@ class DiscountsScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.local_offer_outlined, size: 64, color: AppColors.divider),
+                  Icon(Icons.local_offer_outlined,
+                      size: 64, color: AppColors.divider),
                   const SizedBox(height: 12),
                   const Text('Chưa có mã giảm giá'),
                   const SizedBox(height: 16),
@@ -168,7 +178,7 @@ class DiscountsScreen extends StatelessWidget {
                   leading: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.accent.withOpacity(0.15),
+                      color: AppColors.accent.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.local_offer,
@@ -189,7 +199,7 @@ class DiscountsScreen extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
+                          color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -214,7 +224,8 @@ class DiscountsScreen extends StatelessWidget {
                       ),
                       PopupMenuButton<String>(
                         itemBuilder: (_) => [
-                          const PopupMenuItem(value: 'edit', child: Text('Sửa')),
+                          const PopupMenuItem(
+                              value: 'edit', child: Text('Sửa')),
                           const PopupMenuItem(
                             value: 'delete',
                             child: Text('Xóa',

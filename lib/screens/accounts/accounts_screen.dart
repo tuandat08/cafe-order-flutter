@@ -26,7 +26,10 @@ class AccountsScreen extends StatelessWidget {
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setSt) => Padding(
             padding: EdgeInsets.fromLTRB(
-              16, 16, 16, MediaQuery.of(ctx).viewInsets.bottom + 16,
+              16,
+              16,
+              16,
+              MediaQuery.of(ctx).viewInsets.bottom + 16,
             ),
             child: SingleChildScrollView(
               child: Column(
@@ -35,12 +38,14 @@ class AccountsScreen extends StatelessWidget {
                 children: [
                   Text(
                     acc == null ? 'Thêm tài khoản' : 'Chỉnh sửa tài khoản',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 18),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: usernameCtrl,
-                    decoration: const InputDecoration(labelText: 'Tên đăng nhập *'),
+                    decoration:
+                        const InputDecoration(labelText: 'Tên đăng nhập *'),
                     readOnly: acc != null,
                     autocorrect: false,
                   ),
@@ -53,17 +58,20 @@ class AccountsScreen extends StatelessWidget {
                   TextFormField(
                     controller: passCtrl,
                     decoration: InputDecoration(
-                      labelText: acc == null ? 'Mật khẩu *' : 'Mật khẩu mới (để trống = giữ nguyên)',
+                      labelText: acc == null
+                          ? 'Mật khẩu *'
+                          : 'Mật khẩu mới (để trống = giữ nguyên)',
                     ),
                     obscureText: true,
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: role,
+                    initialValue: role,
                     decoration: const InputDecoration(labelText: 'Vai trò'),
                     items: const [
                       DropdownMenuItem(value: 'admin', child: Text('Quản lý')),
-                      DropdownMenuItem(value: 'staff', child: Text('Nhân viên')),
+                      DropdownMenuItem(
+                          value: 'staff', child: Text('Nhân viên')),
                       DropdownMenuItem(value: 'kitchen', child: Text('Bếp')),
                     ],
                     onChanged: (v) => setSt(() => role = v ?? 'staff'),
@@ -100,7 +108,8 @@ class AccountsScreen extends StatelessWidget {
                           'active': active,
                         });
                         if (passCtrl.text.isNotEmpty) {
-                          await authService.updatePassword(acc.id, passCtrl.text);
+                          await authService.updatePassword(
+                              acc.id, passCtrl.text);
                         }
                       }
                       if (ctx.mounted) Navigator.pop(ctx);
@@ -142,9 +151,10 @@ class AccountsScreen extends StatelessWidget {
               return Card(
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: _roleColor(a.role).withOpacity(0.15),
+                    backgroundColor: _roleColor(a.role).withValues(alpha: 0.15),
                     child: Text(
-                      (a.fullName.isNotEmpty ? a.fullName : 'A')[0].toUpperCase(),
+                      (a.fullName.isNotEmpty ? a.fullName : 'A')[0]
+                          .toUpperCase(),
                       style: TextStyle(
                         color: _roleColor(a.role),
                         fontWeight: FontWeight.bold,
@@ -160,9 +170,10 @@ class AccountsScreen extends StatelessWidget {
                       Text('@${a.username}'),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
-                          color: _roleColor(a.role).withOpacity(0.1),
+                          color: _roleColor(a.role).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -189,7 +200,8 @@ class AccountsScreen extends StatelessWidget {
                       ),
                       PopupMenuButton<String>(
                         itemBuilder: (_) => [
-                          const PopupMenuItem(value: 'edit', child: Text('Sửa')),
+                          const PopupMenuItem(
+                              value: 'edit', child: Text('Sửa')),
                           PopupMenuItem(
                             value: 'toggle',
                             child: Text(a.active ? 'Vô hiệu hóa' : 'Kích hoạt'),
@@ -198,7 +210,8 @@ class AccountsScreen extends StatelessWidget {
                         onSelected: (v) {
                           if (v == 'edit') openForm(a);
                           if (v == 'toggle') {
-                            authService.updateAccount(a.id, {'active': !a.active});
+                            authService
+                                .updateAccount(a.id, {'active': !a.active});
                           }
                         },
                       ),
@@ -215,9 +228,12 @@ class AccountsScreen extends StatelessWidget {
 
   Color _roleColor(String role) {
     switch (role) {
-      case 'admin': return AppColors.primary;
-      case 'kitchen': return AppColors.info;
-      default: return AppColors.accent;
+      case 'admin':
+        return AppColors.primary;
+      case 'kitchen':
+        return AppColors.info;
+      default:
+        return AppColors.accent;
     }
   }
 }

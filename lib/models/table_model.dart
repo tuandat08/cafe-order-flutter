@@ -6,6 +6,11 @@ class TableModel {
   final int capacity;
   final String status; // 'available' | 'occupied' | 'reserved'
   final String? currentOrderId;
+  final Map<String, dynamic>? activeDiscount; // web: {id, code, type, value, maxDiscount, description}
+  final DateTime? serviceRequest; // web: tables.serviceRequest (đang gọi phục vụ)
+  final DateTime? lastBilledAt;   // web: tables.lastBilledAt (đã xuất bill)
+  final DateTime? clearedAt;      // web: tables.clearedAt (lần dọn bàn gần nhất)
+  final bool isTakeaway;          // web: tables.type == 'takeaway' (bàn mang về)
 
   TableModel({
     required this.id,
@@ -13,16 +18,40 @@ class TableModel {
     required this.capacity,
     required this.status,
     this.currentOrderId,
+    this.activeDiscount,
+    this.serviceRequest,
+    this.lastBilledAt,
+    this.clearedAt,
+    this.isTakeaway = false,
   });
+
+  static DateTime? _ts(dynamic v) {
+    if (v == null) return null;
+    if (v is Timestamp) return v.toDate();
+    if (v is DateTime) return v;
+    if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+    if (v is String) return DateTime.tryParse(v);
+    return null;
+  }
+
+  static int _int(dynamic v, int def) {
+    if (v is num) return v.toInt();
+    return int.tryParse('${v ?? ''}') ?? def;
+  }
 
   factory TableModel.fromDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return TableModel(
       id: doc.id,
       name: data['name'] ?? 'Bàn ${doc.id}',
-      capacity: (data['capacity'] ?? 4).toInt(),
+      capacity: _int(data['capacity'], 4),
       status: data['status'] ?? 'available',
       currentOrderId: data['currentOrderId'],
+      activeDiscount: data['activeDiscount'] is Map ? (data['activeDiscount'] as Map).cast<String, dynamic>() : null,
+      serviceRequest: _ts(data['serviceRequest']),
+      lastBilledAt: _ts(data['lastBilledAt']),
+      clearedAt: _ts(data['clearedAt']),
+      isTakeaway: data['type'] == 'takeaway',
     );
   }
 
@@ -42,4 +71,14 @@ class TableModel {
   }
 
   bool get isAvailable => status == 'available';
+
+  TableModel copyWith({Map<String, dynamic>? activeDiscount, bool clearDiscount = false}) {
+    return TableModel(
+      id: id, name: name, capacity: capacity, status: status,
+      currentOrderId: currentOrderId,
+      activeDiscount: clearDiscount ? null : (activeDiscount ?? this.activeDiscount),
+      serviceRequest: serviceRequest, lastBilledAt: lastBilledAt, clearedAt: clearedAt,
+      isTakeaway: isTakeaway,
+    );
+  }
 }

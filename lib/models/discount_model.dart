@@ -8,6 +8,7 @@ class DiscountModel {
   final double maxDiscount;
   final int usedCount;
   final int? maxUsage;
+  final String? description;
   final bool active;
   final DateTime? expiresAt;
   final DateTime? createdAt;
@@ -20,10 +21,20 @@ class DiscountModel {
     required this.maxDiscount,
     required this.usedCount,
     this.maxUsage,
+    this.description,
     required this.active,
     this.expiresAt,
     this.createdAt,
   });
+
+  static DateTime? _ts(dynamic v) {
+    if (v == null) return null;
+    if (v is Timestamp) return v.toDate();
+    if (v is DateTime) return v;
+    if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+    if (v is String) return DateTime.tryParse(v);
+    return null;
+  }
 
   factory DiscountModel.fromDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -31,13 +42,14 @@ class DiscountModel {
       id: doc.id,
       code: data['code'] ?? '',
       type: data['type'] ?? 'percent',
-      value: (data['value'] ?? 0).toDouble(),
-      maxDiscount: (data['maxDiscount'] ?? 0).toDouble(),
-      usedCount: (data['usedCount'] ?? 0).toInt(),
-      maxUsage: data['maxUsage'],
+      value: double.tryParse('${data['value'] ?? 0}') ?? 0.0,
+      maxDiscount: double.tryParse('${data['maxDiscount'] ?? 0}') ?? 0.0,
+      usedCount: int.tryParse('${data['usedCount'] ?? 0}') ?? 0,
+      maxUsage: data['maxUsage'] != null ? int.tryParse('${data['maxUsage']}') : (data['usageLimit'] != null ? int.tryParse('${data['usageLimit']}') : null),
+      description: data['description']?.toString(),
       active: data['active'] ?? true,
-      expiresAt: (data['expiresAt'] as Timestamp?)?.toDate(),
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      expiresAt: _ts(data['expiresAt']),
+      createdAt: _ts(data['createdAt']),
     );
   }
 
@@ -48,6 +60,7 @@ class DiscountModel {
     'maxDiscount': maxDiscount,
     'usedCount': usedCount,
     if (maxUsage != null) 'maxUsage': maxUsage,
+    if (description != null) 'description': description,
     'active': active,
     if (expiresAt != null) 'expiresAt': Timestamp.fromDate(expiresAt!),
   };
@@ -59,6 +72,7 @@ class DiscountModel {
   bool get isExpired =>
       expiresAt != null && expiresAt!.isBefore(DateTime.now());
 
+  // Giống web: chỉ chặn khi usageLimit > 0 (0 = không giới hạn)
   bool get isMaxedOut =>
-      maxUsage != null && usedCount >= maxUsage!;
+      maxUsage != null && maxUsage! > 0 && usedCount >= maxUsage!;
 }

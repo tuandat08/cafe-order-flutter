@@ -5,9 +5,13 @@ class DiscountService {
   final _db = FirebaseFirestore.instance;
 
   Stream<List<DiscountModel>> streamDiscounts() {
-    return _db.collection('discounts').snapshots().map(
-      (s) => s.docs.map(DiscountModel.fromDoc).toList(),
-    );
+    return _db.collection('discounts').snapshots().map((s) {
+      final list = <DiscountModel>[];
+      for (final d in s.docs) {
+        try { list.add(DiscountModel.fromDoc(d)); } catch (_) {}
+      }
+      return list;
+    });
   }
 
   Future<void> save(DiscountModel discount) async {
@@ -28,5 +32,10 @@ class DiscountService {
 
   Future<void> toggle(String id, bool active) async {
     await _db.collection('discounts').doc(id).update({'active': active});
+  }
+
+  // Tăng lượt dùng mã sau khi áp dụng (giống web incrementUsage)
+  Future<void> incrementUsage(String id) async {
+    await _db.collection('discounts').doc(id).update({'usedCount': FieldValue.increment(1)});
   }
 }

@@ -120,9 +120,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                border:
+                    Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [

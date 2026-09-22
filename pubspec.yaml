@@ -34,6 +34,20 @@ dependencies:
   uuid: ^4.4.2
   url_launcher: ^6.3.0
 
+  # In hóa đơn
+  printing: ^5.13.3
+  pdf: ^3.11.1
+
+  # In hóa đơn qua máy in nhiệt ESC/POS (LAN/Wi-Fi hoặc Bluetooth)
+  shared_preferences: ^2.3.3
+  esc_pos_utils_plus: ^2.0.4
+  flutter_pos_printer_platform_image_3: ^1.1.9
+  image: ^4.2.0
+
+  # Âm thanh + giọng đọc thông báo (giống useAudioNotification web)
+  audioplayers: ^6.1.0
+  flutter_tts: ^4.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -43,3 +57,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/sounds/

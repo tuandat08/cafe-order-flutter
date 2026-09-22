@@ -10,21 +10,9 @@ import '../reports/reports_screen.dart';
 import '../discounts/discounts_screen.dart';
 import '../accounts/accounts_screen.dart';
 
-class NavItem {
-  final String label;
-  final IconData icon;
-  final IconData selectedIcon;
-  final Widget screen;
-  final bool adminOnly;
-
-  const NavItem({
-    required this.label,
-    required this.icon,
-    required this.selectedIcon,
-    required this.screen,
-    this.adminOnly = false,
-  });
-}
+// TẠM: chỉ hiển thị mục "Đơn hàng", ẩn các mục còn lại.
+// Đổi về false để bật lại phân quyền đầy đủ (admin thấy hết, staff chỉ Đơn hàng).
+const bool _kTempOnlyOrders = true;
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -35,254 +23,445 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
+  bool _sidebarCollapsed = true; // mặc định đóng khi mở app
 
-  List<NavItem> _getNavItems(bool isAdmin) {
-    final all = [
-      const NavItem(
-        label: 'Dashboard',
-        icon: Icons.dashboard_outlined,
-        selectedIcon: Icons.dashboard,
-        screen: DashboardScreen(),
-      ),
-      const NavItem(
-        label: 'Đơn hàng',
-        icon: Icons.receipt_long_outlined,
-        selectedIcon: Icons.receipt_long,
-        screen: OrdersScreen(),
-      ),
-      const NavItem(
-        label: 'Menu',
-        icon: Icons.menu_book_outlined,
-        selectedIcon: Icons.menu_book,
-        screen: MenuScreen(),
-        adminOnly: true,
-      ),
-      const NavItem(
-        label: 'Bàn',
-        icon: Icons.table_bar_outlined,
-        selectedIcon: Icons.table_bar,
-        screen: TablesScreen(),
-        adminOnly: true,
-      ),
-      const NavItem(
-        label: 'Báo cáo',
-        icon: Icons.bar_chart_outlined,
-        selectedIcon: Icons.bar_chart,
-        screen: ReportsScreen(),
-        adminOnly: true,
-      ),
-      const NavItem(
-        label: 'Khuyến mãi',
-        icon: Icons.local_offer_outlined,
-        selectedIcon: Icons.local_offer,
-        screen: DiscountsScreen(),
-        adminOnly: true,
-      ),
-      const NavItem(
-        label: 'Tài khoản',
-        icon: Icons.people_outline,
-        selectedIcon: Icons.people,
-        screen: AccountsScreen(),
-        adminOnly: true,
-      ),
+  late final bool _isAdmin;
+  late final List<_NavItem> _navItems;
+  late final List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    // Phân quyền giống web: admin thấy mọi mục; staff/kitchen chỉ vào "Đơn hàng".
+    _isAdmin = context.read<AuthProvider>().isAdmin;
+
+    final all = <_NavEntry>[
+      _NavEntry(Icons.dashboard_rounded,        'Tổng quan',  const DashboardScreen(), adminOnly: true),
+      _NavEntry(Icons.receipt_long_rounded,     'Đơn hàng',   OrdersScreen(onToggleSidebar: _toggleSidebar), adminOnly: false, tooltip: 'Quản Lý Đặt Món'),
+      _NavEntry(Icons.restaurant_menu_rounded,  'Menu',       const MenuScreen(),      adminOnly: true),
+      _NavEntry(Icons.table_restaurant_rounded, 'Bàn',        const TablesScreen(),    adminOnly: true),
+      _NavEntry(Icons.bar_chart_rounded,        'Báo cáo',    ReportsScreen(),         adminOnly: true),
+      _NavEntry(Icons.local_offer_rounded,      'Khuyến mãi', const DiscountsScreen(), adminOnly: true),
+      _NavEntry(Icons.manage_accounts_rounded,  'Tài khoản',  const AccountsScreen(),  adminOnly: true),
     ];
-    return isAdmin ? all : all.where((n) => !n.adminOnly).toList();
+    final visible = all.where((e) {
+      if (_kTempOnlyOrders) return e.label == 'Đơn hàng'; // tạm chỉ giữ Đơn hàng
+      return !e.adminOnly || _isAdmin;
+    }).toList();
+    _navItems = visible.map((e) => _NavItem(icon: e.icon, label: e.label, tooltip: e.tooltip ?? e.label)).toList();
+    _screens  = visible.map((e) => e.screen).toList();
   }
+
+  void _logout() => context.read<AuthProvider>().logout();
+  void _toggleSidebar() => setState(() => _sidebarCollapsed = !_sidebarCollapsed);
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    final navItems = _getNavItems(auth.isAdmin);
-    final isWide = MediaQuery.of(context).size.width >= 720;
+    final isDesktop = MediaQuery.of(context).size.width >= 720;
+    return isDesktop ? _buildDesktop() : _buildMobile();
+  }
 
-    // Clamp index if navItems changed
-    if (_selectedIndex >= navItems.length) _selectedIndex = 0;
-
-    final currentScreen = navItems[_selectedIndex].screen;
-
-    if (isWide) {
-      // Sidebar layout for tablet/desktop
-      return Scaffold(
-        body: Row(
+  // ──────────────────────────────────────────────
+  // DESKTOP
+  // ──────────────────────────────────────────────
+  Widget _buildDesktop() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        bottom: false,
+        child: Row(
           children: [
-            _SideNav(
-              items: navItems,
-              selectedIndex: _selectedIndex,
-              onSelected: (i) => setState(() => _selectedIndex = i),
-              user: auth.currentUser,
-              onLogout: () => auth.logout(),
+            // Ẩn hẳn ↔ hiện dạng rail hẹp (chỉ icon). Mở lại bằng nút ☰ trên topbar.
+            if (!_sidebarCollapsed)
+              _Sidebar(
+                selectedIndex: _selectedIndex,
+                items: _navItems,
+                collapsed: true, // luôn hiện dạng rail hẹp khi mở
+                onSelect: (i) => setState(() => _selectedIndex = i),
+                onLogout: _logout,
+                onToggle: _toggleSidebar,
+              ),
+            Expanded(
+              child: IndexedStack(
+                index: _selectedIndex,
+                children: _screens,
+              ),
             ),
-            const VerticalDivider(width: 1),
-            Expanded(child: currentScreen),
           ],
         ),
-      );
-    } else {
-      // Bottom nav for mobile
-      return Scaffold(
-        body: currentScreen,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _selectedIndex,
-          onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-          destinations: navItems
-              .map((n) => NavigationDestination(
-                    icon: Icon(n.icon),
-                    selectedIcon: Icon(n.selectedIcon),
-                    label: n.label,
-                  ))
-              .toList(),
-          backgroundColor: Colors.white,
-          elevation: 4,
-        ),
-      );
-    }
+      ),
+    );
+  }
+
+  // ──────────────────────────────────────────────
+  // MOBILE
+  // ──────────────────────────────────────────────
+  Widget _buildMobile() {
+    final showNav = _navItems.length >= 2;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_navItems[_selectedIndex].label),
+        automaticallyImplyLeading: false,
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            tooltip: 'Đăng xuất',
+            onPressed: _logout,
+          ),
+        ],
+      ),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: showNav
+          ? NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+              backgroundColor: AppColors.surface,
+              indicatorColor: AppColors.primary.withValues(alpha: 0.12),
+              labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+              destinations: _navItems.map((item) => NavigationDestination(
+                icon: Icon(item.icon, color: AppColors.textSecondary),
+                selectedIcon: Icon(item.icon, color: AppColors.primary),
+                label: item.label,
+              )).toList(),
+            )
+          : null,
+    );
   }
 }
 
-class _SideNav extends StatelessWidget {
-  final List<NavItem> items;
+// ──────────────────────────────────────────────
+// SIDEBAR
+// ──────────────────────────────────────────────
+class _Sidebar extends StatelessWidget {
   final int selectedIndex;
-  final ValueChanged<int> onSelected;
-  final dynamic user;
+  final List<_NavItem> items;
+  final bool collapsed;
+  final ValueChanged<int> onSelect;
   final VoidCallback onLogout;
+  final VoidCallback onToggle;
 
-  const _SideNav({
-    required this.items,
+  const _Sidebar({
     required this.selectedIndex,
-    required this.onSelected,
-    required this.user,
+    required this.items,
+    required this.collapsed,
+    required this.onSelect,
     required this.onLogout,
+    required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 220,
-      color: AppColors.primaryDark,
+    final user = context.watch<AuthProvider>().currentUser;
+    final name = (user?.fullName.isNotEmpty ?? false) ? user!.fullName : 'Người dùng';
+    final roleLabel = user?.roleLabel ?? '';
+    final isAdmin = user?.role == 'admin';
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeInOut,
+      width: collapsed ? 68 : 230,
+      color: AppColors.sidebarBg,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 48, 16, 20),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: AppColors.accent,
-                    borderRadius: BorderRadius.circular(8),
+          // Logo (chỉ ở dạng đầy đủ). Dạng rail hẹp: bỏ header ☰, để icon nav lên đầu.
+          if (!collapsed)
+            Container(
+              height: 64,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              color: Colors.black26,
+              child: Row(
+                children: [
+                  Container(
+                    width: 34, height: 34,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.coffee_rounded, color: Colors.white, size: 20),
                   ),
-                  child: const Icon(Icons.coffee, color: Colors.white, size: 20),
-                ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Cafe Admin',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('CAFÉ',
+                          style: TextStyle(color: Colors.white, fontSize: 15,
+                            fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+                        Text('Admin Panel',
+                          style: TextStyle(color: Colors.white54, fontSize: 10, letterSpacing: 0.5)),
+                      ],
                     ),
                   ),
-                ),
-              ],
+                  IconButton(
+                    icon: const Icon(Icons.menu_open_rounded, color: Colors.white70, size: 20),
+                    onPressed: onToggle,
+                  ),
+                ],
+              ),
             ),
-          ),
-          const Divider(color: Colors.white24, height: 1),
-          const SizedBox(height: 8),
+
+          // Section label
+          if (!collapsed)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Text('QUẢN LÝ',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.35),
+                  fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.2)),
+            )
+          else
+            const SizedBox(height: 12),
 
           // Nav items
           Expanded(
             child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               itemCount: items.length,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              itemBuilder: (context, index) {
-                final item = items[index];
-                final selected = index == selectedIndex;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: ListTile(
-                    leading: Icon(
-                      selected ? item.selectedIcon : item.icon,
-                      color: selected ? AppColors.accent : Colors.white70,
-                      size: 20,
-                    ),
-                    title: Text(
-                      item.label,
-                      style: TextStyle(
-                        color: selected ? Colors.white : Colors.white70,
-                        fontWeight: selected
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                        fontSize: 14,
-                      ),
-                    ),
-                    selected: selected,
-                    selectedTileColor: Colors.white.withOpacity(0.1),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    dense: true,
-                    onTap: () => onSelected(index),
-                  ),
-                );
-              },
+              itemBuilder: (_, i) => _SidebarItem(
+                item: items[i],
+                isSelected: i == selectedIndex,
+                collapsed: collapsed,
+                onTap: () => onSelect(i),
+              ),
             ),
           ),
 
-          // User info & logout
-          const Divider(color: Colors.white24, height: 1),
+          // Bottom divider + user + logout
+          const Divider(color: Colors.white10, height: 1),
           Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: AppColors.accent,
-                  child: Text(
-                    (user?.fullName ?? 'A').substring(0, 1).toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+            padding: EdgeInsets.all(collapsed ? 10 : 16),
+            child: collapsed
+                ? Column(
                     children: [
-                      Text(
-                        user?.fullName ?? '',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                      _RailTooltip(
+                        message: roleLabel.isNotEmpty ? '$name • $roleLabel' : name,
+                        child: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: isAdmin ? const Color(0xFF8B5CF6) : AppColors.primary,
+                          child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      Text(
-                        user?.roleLabel ?? '',
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 11,
+                      const SizedBox(height: 4),
+                      _RailTooltip(
+                        message: 'Đăng xuất',
+                        child: IconButton(
+                          icon: const Icon(Icons.logout_rounded, size: 18),
+                          color: Colors.white54,
+                          onPressed: onLogout,
                         ),
                       ),
                     ],
+                  )
+                : Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: isAdmin ? const Color(0xFF8B5CF6) : AppColors.primary,
+                        child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name,
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                            Text(roleLabel,
+                              style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.logout_rounded, size: 18),
+                        color: Colors.white54,
+                        tooltip: 'Đăng xuất',
+                        onPressed: onLogout,
+                      ),
+                    ],
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.logout, color: Colors.white60, size: 20),
-                  onPressed: onLogout,
-                  tooltip: 'Đăng xuất',
-                ),
-              ],
-            ),
           ),
         ],
       ),
     );
   }
+}
+
+class _SidebarItem extends StatelessWidget {
+  final _NavItem item;
+  final bool isSelected;
+  final bool collapsed;
+  final VoidCallback onTap;
+
+  const _SidebarItem({
+    required this.item,
+    required this.isSelected,
+    required this.collapsed,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final row = collapsed
+        ? Center(
+            child: Icon(item.icon, size: 20,
+              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.55)),
+          )
+        : Row(
+            children: [
+              Icon(item.icon, size: 18,
+                color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.55)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(item.label,
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.6),
+                    fontSize: 13.5,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  )),
+              ),
+              if (isSelected)
+                Container(
+                  width: 4, height: 4,
+                  decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
+                ),
+            ],
+          );
+
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          hoverColor: Colors.white.withValues(alpha: 0.05),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: EdgeInsets.symmetric(horizontal: collapsed ? 8 : 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: isSelected ? AppColors.primary.withValues(alpha: 0.85) : Colors.transparent,
+            ),
+            child: row,
+          ),
+        ),
+      ),
+    );
+
+    return collapsed ? _RailTooltip(message: item.tooltip, child: content) : content;
+  }
+}
+
+// ──────────────────────────────────────────────
+// Tooltip tùy biến: hiện bên PHẢI, có mũi tên chỉ vào icon
+// ──────────────────────────────────────────────
+class _RailTooltip extends StatefulWidget {
+  final String message;
+  final Widget child;
+  const _RailTooltip({required this.message, required this.child});
+
+  @override
+  State<_RailTooltip> createState() => _RailTooltipState();
+}
+
+class _RailTooltipState extends State<_RailTooltip> {
+  OverlayEntry? _entry;
+
+  void _show() {
+    if (_entry != null) return;
+    final box = context.findRenderObject() as RenderBox?;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) return;
+    final offset = box.localToGlobal(Offset.zero, ancestor: overlay);
+    final size = box.size;
+    _entry = OverlayEntry(
+      builder: (_) => Positioned(
+        left: offset.dx + size.width + 6,
+        top: offset.dy + size.height / 2,
+        child: FractionalTranslation(
+          translation: const Offset(0, -0.5),
+          child: Material(
+            color: Colors.transparent,
+            child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, children: [
+              CustomPaint(size: const Size(6, 12), painter: _TooltipArrowPainter()),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 6, offset: Offset(0, 2))],
+                ),
+                child: Text(widget.message,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+    Overlay.of(context).insert(_entry!);
+  }
+
+  void _hide() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  @override
+  void dispose() {
+    _hide();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => _show(),
+      onExit: (_) => _hide(),
+      child: widget.child,
+    );
+  }
+}
+
+class _TooltipArrowPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = const Color(0xFF1E293B)..style = PaintingStyle.fill;
+    final path = Path()
+      ..moveTo(0, size.height / 2)          // đỉnh mũi tên chỉ sang trái (vào icon)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _NavItem {
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  const _NavItem({required this.icon, required this.label, required this.tooltip});
+}
+
+class _NavEntry {
+  final IconData icon;
+  final String label;
+  final Widget screen;
+  final bool adminOnly;
+  final String? tooltip;
+  const _NavEntry(this.icon, this.label, this.screen, {required this.adminOnly, this.tooltip});
 }

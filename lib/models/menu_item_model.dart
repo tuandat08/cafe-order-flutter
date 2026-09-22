@@ -19,15 +19,47 @@ class MenuItemModel {
     this.available = true,
   });
 
+  static String? _parseString(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return value;
+    if (value is Map) return value['url']?.toString() ?? value.values.first?.toString();
+    return value.toString();
+  }
+
+  // Giá có thể là số hoặc {vnd, usd} (web lưu price: {vnd, usd})
+  static double _parsePrice(dynamic raw) {
+    if (raw is Map) {
+      return double.tryParse('${raw['vnd'] ?? 0}') ?? 0.0;
+    }
+    return double.tryParse('${raw ?? 0}') ?? 0.0;
+  }
+
+  // Ảnh có thể là URL string hoặc object Cloudinary {url, secure_url, src}
+  static String? _parseImg(dynamic raw) {
+    if (raw == null) return null;
+    String? u;
+    if (raw is String) {
+      u = raw;
+    } else if (raw is Map) {
+      u = (raw['url'] ?? raw['secure_url'] ?? raw['src'])?.toString();
+    } else {
+      u = raw.toString();
+    }
+    if (u == null || u.isEmpty) return null;
+    if (u.startsWith('//')) u = 'https:$u';       // protocol-relative → https
+    if (u.startsWith('http://')) u = u.replaceFirst('http://', 'https://');
+    return u;
+  }
+
   factory MenuItemModel.fromDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return MenuItemModel(
       id: doc.id,
-      name: data['name'] ?? '',
-      price: (data['price'] ?? 0).toDouble(),
-      category: data['category'] ?? '',
-      imageUrl: data['imageUrl'] ?? data['image'],
-      description: data['description'],
+      name: _parseString(data['name']) ?? '',
+      price: _parsePrice(data['price']),
+      category: _parseString(data['category']) ?? '',
+      imageUrl: _parseImg(data['imageUrl']) ?? _parseImg(data['image']),
+      description: _parseString(data['description']),
       available: data['available'] ?? true,
     );
   }

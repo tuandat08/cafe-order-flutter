@@ -53,7 +53,8 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: isWide ? 420 : double.infinity),
+            constraints:
+                BoxConstraints(maxWidth: isWide ? 420 : double.infinity),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -66,7 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.3),
+                        color: AppColors.primary.withValues(alpha: 0.3),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
@@ -82,15 +83,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 Text(
                   'Cafe Admin',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
                 Text(
                   'Hệ thống quản lý quán cà phê',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+                        color: AppColors.textSecondary,
+                      ),
                 ),
                 const SizedBox(height: 40),
 
@@ -105,10 +106,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         children: [
                           Text(
                             'Đăng nhập',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
                           ),
                           const SizedBox(height: 24),
 
@@ -147,9 +151,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             textInputAction: TextInputAction.done,
                             onFieldSubmitted: (_) => _handleLogin(),
-                            validator: (v) => (v?.isEmpty ?? true)
-                                ? 'Nhập mật khẩu'
-                                : null,
+                            validator: (v) =>
+                                (v?.isEmpty ?? true) ? 'Nhập mật khẩu' : null,
                           ),
                           const SizedBox(height: 24),
 

@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
@@ -9,7 +10,12 @@ import 'screens/main/main_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    if (e is! FirebaseException || e.code != 'duplicate-app') rethrow;
+  }
+  await initializeDateFormatting('vi', null);
   runApp(const CafeAdminApp());
 }
 

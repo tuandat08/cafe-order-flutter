@@ -1,0 +1,34 @@
+PODS:
+  - flutter_tts (0.0.1):
+    - FlutterMacOS
+  - FlutterMacOS (1.0.0)
+  - network_info_plus (0.0.1):
+    - FlutterMacOS
+  - printing (1.0.0):
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - flutter_tts (from `Flutter/ephemeral/.symlinks/plugins/flutter_tts/macos`)
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - network_info_plus (from `Flutter/ephemeral/.symlinks/plugins/network_info_plus/macos`)
+  - printing (from `Flutter/ephemeral/.symlinks/plugins/printing/macos`)
+
+EXTERNAL SOURCES:
+  flutter_tts:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_tts/macos
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  network_info_plus:
+    :path: Flutter/ephemeral/.symlinks/plugins/network_info_plus/macos
+  printing:
+    :path: Flutter/ephemeral/.symlinks/plugins/printing/macos
+
+SPEC CHECKSUMS:
+  flutter_tts: ae915565cc6948444b513acc8ee021993281e027
+  FlutterMacOS: c232990155153907050900a2e175c7773903ba4e
+  network_info_plus: e4d4efcc88f6cabc6e19147ffc223c371d191ab6
+  printing: c4cf83c78fd684f9bc318e6aadc18972aa48f617
+
+PODFILE CHECKSUM: 1e95c36afbfd1cb6423ceca4de7a8e1b256fb6ac
+
+COCOAPODS: 1.17.0
