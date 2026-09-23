@@ -142,7 +142,16 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Cài đặt máy in')),
+      appBar: AppBar(
+        title: const Text('Cài đặt máy in'),
+        // Panel này trượt ra/vào từ bên phải (không phải điều hướng "quay lại"),
+        // nên dùng icon đóng (X) thay vì mũi tên back cho đúng ngữ nghĩa.
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          tooltip: 'Đóng',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),

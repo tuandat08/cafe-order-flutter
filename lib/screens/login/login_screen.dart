@@ -28,7 +28,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.read<AuthProvider>();
     final ok = await auth.login(
       _usernameCtrl.text.trim(),
-      _passwordCtrl.text,
+      _passwordCtrl.text.trim(),
     );
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -135,6 +135,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           TextFormField(
                             controller: _passwordCtrl,
                             obscureText: _obscurePassword,
+                            autocorrect: false,
+                            enableSuggestions: false,
                             decoration: InputDecoration(
                               labelText: 'Mật khẩu',
                               prefixIcon: const Icon(Icons.lock_outline),

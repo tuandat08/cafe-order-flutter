@@ -33,15 +33,13 @@ class DefaultFirebaseOptions {
     appId: '1:348886800909:web:7b762a0247f0237fb29344',
   );
 
-  // ⚠️ Android: Tải google-services.json từ Firebase Console và
-  // đặt vào android/app/. Sau đó cập nhật appId dưới đây.
+  // Android: lấy từ google-services.json (đăng ký qua flutterfire configure)
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAds7yjZHgKKuoltBfHB6Xfr7MkMvYSXes',
-    authDomain: 'order-fa2b5.firebaseapp.com',
+    apiKey: 'AIzaSyDPGctPhskTm3a7eEQk1Xbr1A544ddaeZ0',
     projectId: 'order-fa2b5',
     storageBucket: 'order-fa2b5.firebasestorage.app',
     messagingSenderId: '348886800909',
-    appId: '1:348886800909:android:REPLACE_WITH_ANDROID_APP_ID', // ← Thay thế
+    appId: '1:348886800909:android:089c60a02794281fb29344',
   );
 
   // ⚠️ iOS: Tải GoogleService-Info.plist từ Firebase Console và

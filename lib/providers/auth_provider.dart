@@ -33,7 +33,11 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       }
-    } catch (e) {
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('[AuthProvider] login exception: $e');
+      // ignore: avoid_print
+      print(st);
       _error = 'Lỗi kết nối. Vui lòng thử lại.';
       _isLoading = false;
       notifyListeners();

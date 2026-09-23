@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "348886800909",
+    "project_id": "order-fa2b5",
+    "storage_bucket": "order-fa2b5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:348886800909:android:089c60a02794281fb29344",
+        "android_client_info": {
+          "package_name": "com.datpdt.cafe_admin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "348886800909-bg1ajcm81fae0vfkmmrqo3v9uh55ohlk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDPGctPhskTm3a7eEQk1Xbr1A544ddaeZ0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "348886800909-bg1ajcm81fae0vfkmmrqo3v9uh55ohlk.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "348886800909-f7gj4623n4ocf175ukbgdelavv758qha.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.datpdt.cafeAdmin"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

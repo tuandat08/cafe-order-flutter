@@ -4,6 +4,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class InvoiceService {
   final _db = FirebaseFirestore.instance;
 
+  /// Sinh trước 1 ID hóa đơn (chưa ghi vào Firestore) — dùng để hiển thị "Số
+  /// hóa đơn" trên preview TRƯỚC khi bấm in, rồi dùng lại đúng ID này khi lưu
+  /// thật (saveInvoice) để preview và bill in ra khớp 100%.
+  String newInvoiceId() => _db.collection('invoices').doc().id;
+
   /// Hóa đơn active gần nhất của bàn (để phát hiện "in lần 2").
   Future<Map<String, dynamic>?> getLatestActiveForTable(
     String tableId, {
@@ -88,6 +93,7 @@ class InvoiceService {
     String? previousInvoiceId,
     String? staffName,
     String? staffId,
+    String? invoiceId, // nếu có (từ newInvoiceId()) → ghi đúng ID này, để khớp với preview
   }) async {
     try {
       final isPrint2 = previousInvoiceId != null;
@@ -114,11 +120,18 @@ class InvoiceService {
         if (isPrint2) 'reason': reason,
         if (isPrint2) 'previousInvoiceId': previousInvoiceId,
       };
-      final ref = await _db.collection('invoices').add(toSave);
+      String resultId;
+      if (invoiceId != null && invoiceId.isNotEmpty) {
+        await _db.collection('invoices').doc(invoiceId).set(toSave);
+        resultId = invoiceId;
+      } else {
+        final ref = await _db.collection('invoices').add(toSave);
+        resultId = ref.id;
+      }
       if (isPrint2 && previousInvoiceId != null) {
         await supersede(previousInvoiceId);
       }
-      return ref.id;
+      return resultId;
     } catch (_) {
       return null;
     }

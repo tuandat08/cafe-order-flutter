@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -7,6 +8,9 @@ import '../orders/orders_screen.dart';
 import '../menu/menu_screen.dart';
 import '../tables/tables_screen.dart';
 import '../reports/reports_screen.dart';
+import '../../models/shift_model.dart';
+import '../../services/shift_service.dart';
+import '../shifts/shift_screen.dart';
 import '../discounts/discounts_screen.dart';
 import '../accounts/accounts_screen.dart';
 
@@ -28,6 +32,20 @@ class _MainShellState extends State<MainShell> {
   late final bool _isAdmin;
   late final List<_NavItem> _navItems;
   late final List<Widget> _screens;
+  final _shiftService = ShiftService();
+
+  // Cache lại 1 lần duy nhất — KHÔNG được gọi watchOpenShift() ngay trong
+  // build(), vì build() chạy lại mỗi khi đổi tab (setState _selectedIndex),
+  // nếu tạo stream mới mỗi lần sẽ hủy/mở lại kết nối Firestore liên tục → giật lag.
+  late final bool _requiresShift;
+  Stream<ShiftModel?>? _openShiftStream;
+
+  // true trong lúc đang xử lý đóng ca để đăng xuất (bị ép hoặc chủ động) —
+  // build() sẽ tạm bỏ qua hẳn cổng "cần mở ca" phản ứng theo stream trong
+  // lúc này. Đây là điểm mấu chốt: KHÔNG dựa vào việc đoán thời gian chờ,
+  // mà chặn dứt điểm việc cổng đó có cơ hội render trong suốt quá trình đóng
+  // ca cho tới khi thực sự đăng xuất xong.
+  bool _loggingOut = false;
 
   @override
   void initState() {
@@ -35,16 +53,29 @@ class _MainShellState extends State<MainShell> {
     // Phân quyền giống web: admin thấy mọi mục; staff/kitchen chỉ vào "Đơn hàng".
     _isAdmin = context.read<AuthProvider>().isAdmin;
 
+    final currentUser = context.read<AuthProvider>().currentUser;
+    if (currentUser != null && currentUser.role != 'kitchen') {
+      _requiresShift = true;
+      _openShiftStream = _shiftService.watchOpenShift(currentUser.id);
+    } else {
+      _requiresShift = false;
+    }
+
     final all = <_NavEntry>[
       _NavEntry(Icons.dashboard_rounded,        'Tổng quan',  const DashboardScreen(), adminOnly: true),
       _NavEntry(Icons.receipt_long_rounded,     'Đơn hàng',   OrdersScreen(onToggleSidebar: _toggleSidebar), adminOnly: false, tooltip: 'Quản Lý Đặt Món'),
       _NavEntry(Icons.restaurant_menu_rounded,  'Menu',       const MenuScreen(),      adminOnly: true),
       _NavEntry(Icons.table_restaurant_rounded, 'Bàn',        const TablesScreen(),    adminOnly: true),
       _NavEntry(Icons.bar_chart_rounded,        'Báo cáo',    ReportsScreen(),         adminOnly: true),
+      _NavEntry(Icons.savings_rounded,          'Kiểm ca',    ShiftScreen(
+        onLoggingOutChanged: (v) { if (mounted) setState(() => _loggingOut = v); },
+      ), adminOnly: false, tooltip: 'Kiểm Ca Làm Việc'),
       _NavEntry(Icons.local_offer_rounded,      'Khuyến mãi', const DiscountsScreen(), adminOnly: true),
       _NavEntry(Icons.manage_accounts_rounded,  'Tài khoản',  const AccountsScreen(),  adminOnly: true),
     ];
     final visible = all.where((e) {
+      // "Kiểm ca" không bị cờ tạm _kTempOnlyOrders chặn — mọi tài khoản đều thấy.
+      if (e.label == 'Kiểm ca') return true;
       if (_kTempOnlyOrders) return e.label == 'Đơn hàng'; // tạm chỉ giữ Đơn hàng
       return !e.adminOnly || _isAdmin;
     }).toList();
@@ -52,11 +83,101 @@ class _MainShellState extends State<MainShell> {
     _screens  = visible.map((e) => e.screen).toList();
   }
 
-  void _logout() => context.read<AuthProvider>().logout();
+  // LƯU Ý QUAN TRỌNG: chỉ hàm này (nơi DUY NHẤT gọi CloseShiftDialog từ luồng
+  // đăng xuất) mới được quyết định gọi AuthProvider.logout() sau khi dialog
+  // đóng — dialog CloseShiftDialog tự nó không còn gọi logout() nữa. Trước
+  // đây cả 2 bên (dialog + hàm này) cùng tự ý logout, chạy đua với nhau, có
+  // lúc màn hình đăng nhập bật ra khi dialog đóng ca còn chưa xử lý/đóng
+  // xong hẳn. Nay chỉ dựa vào kết quả trả về của dialog (true = đã đóng ca
+  // thành công), không truy vấn lại Firestore để tránh thêm 1 nguồn race nữa.
+  Future<void> _logout() async {
+    final auth = context.read<AuthProvider>();
+    final user = auth.currentUser;
+    // Bếp không thao tác tiền/ca — cho đăng xuất bình thường.
+    if (user == null || user.role == 'kitchen') {
+      auth.logout();
+      return;
+    }
+    final openShift = await _shiftService.getOpenShift(user.id);
+    if (openShift == null) {
+      auth.logout();
+      return;
+    }
+    final expectedCash = await _shiftService.computeExpectedCash(openShift);
+    if (!mounted) return;
+
+    // Chặn dứt điểm cổng "cần mở ca" TRƯỚC khi mở dialog — xem giải thích ở
+    // field _loggingOut phía trên. Đây mới là điểm sửa gốc rễ, không phải
+    // đoán thời gian chờ.
+    setState(() => _loggingOut = true);
+
+    final closed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CloseShiftDialog(
+        shift: openShift,
+        expectedCash: expectedCash,
+        shiftService: _shiftService,
+        fmt: NumberFormat('#,###', 'vi_VN'),
+      ),
+    );
+
+    if (closed == true) {
+      // showDialog() đã resolve = dialog đã pop khỏi Navigator; đợi chút xíu
+      // chỉ để hiệu ứng đóng dialog mượt mà (KHÔNG phải để chờ xử lý xong —
+      // việc đóng ca đã xử lý & ghi Firestore xong từ trước khi dialog tự pop).
+      await Future.delayed(const Duration(milliseconds: 200));
+      auth.logout();
+      return; // MainShell sắp bị unmount, không cần setState nữa.
+    }
+
+    // Người dùng hủy đóng ca → bỏ cờ chặn, quay lại bình thường.
+    if (mounted) {
+      setState(() => _loggingOut = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bạn cần đóng ca trước khi đăng xuất')),
+      );
+    }
+  }
+
   void _toggleSidebar() => setState(() => _sidebarCollapsed = !_sidebarCollapsed);
 
   @override
   Widget build(BuildContext context) {
+    if (!_requiresShift) return _buildShell();
+
+    // Đang trong lúc đóng ca để đăng xuất → CHỦ ĐỘNG không xét stream ca mở
+    // nữa, luôn hiện màn hình chờ đơn giản. Đây là điểm sửa gốc rễ: nếu vẫn
+    // để StreamBuilder bên dưới quyết định, nó sẽ thấy ca vừa đóng xong (gần
+    // như ngay khi closeShift() ghi Firestore) và tự chuyển sang màn "cần mở
+    // ca" TRONG LÚC dialog đóng ca vẫn còn đang hiển thị phía trên — khiến
+    // người dùng thấy màn "cần mở ca" chớp qua ngay khi dialog vừa đóng, rồi
+    // mới tới màn đăng nhập, tạo cảm giác 2-3 màn hình chồng/nối đuôi nhau.
+    if (_loggingOut) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final user = context.read<AuthProvider>().currentUser!;
+    return StreamBuilder<ShiftModel?>(
+      stream: _openShiftStream,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        if (snap.data == null) {
+          // Chưa mở ca — chặn toàn bộ app, bắt buộc mở ca trước.
+          return OpenShiftGateScreen(
+            staffId: user.id,
+            staffName: user.fullName,
+            shiftService: _shiftService,
+          );
+        }
+        return _buildShell();
+      },
+    );
+  }
+
+  Widget _buildShell() {
     final isDesktop = MediaQuery.of(context).size.width >= 720;
     return isDesktop ? _buildDesktop() : _buildMobile();
   }
@@ -68,7 +189,6 @@ class _MainShellState extends State<MainShell> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        bottom: false,
         child: Row(
           children: [
             // Ẩn hẳn ↔ hiện dạng rail hẹp (chỉ icon). Mở lại bằng nút ☰ trên topbar.

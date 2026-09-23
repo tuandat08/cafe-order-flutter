@@ -6,6 +6,7 @@ class DiscountModel {
   final String type; // 'percent' | 'fixed'
   final double value;
   final double maxDiscount;
+  final double minOrder;
   final int usedCount;
   final int? maxUsage;
   final String? description;
@@ -19,6 +20,7 @@ class DiscountModel {
     required this.type,
     required this.value,
     required this.maxDiscount,
+    this.minOrder = 0,
     required this.usedCount,
     this.maxUsage,
     this.description,
@@ -44,6 +46,7 @@ class DiscountModel {
       type: data['type'] ?? 'percent',
       value: double.tryParse('${data['value'] ?? 0}') ?? 0.0,
       maxDiscount: double.tryParse('${data['maxDiscount'] ?? 0}') ?? 0.0,
+      minOrder: double.tryParse('${data['minOrder'] ?? 0}') ?? 0.0,
       usedCount: int.tryParse('${data['usedCount'] ?? 0}') ?? 0,
       maxUsage: data['maxUsage'] != null ? int.tryParse('${data['maxUsage']}') : (data['usageLimit'] != null ? int.tryParse('${data['usageLimit']}') : null),
       description: data['description']?.toString(),
@@ -58,6 +61,7 @@ class DiscountModel {
     'type': type,
     'value': value,
     'maxDiscount': maxDiscount,
+    'minOrder': minOrder,
     'usedCount': usedCount,
     if (maxUsage != null) 'maxUsage': maxUsage,
     if (description != null) 'description': description,

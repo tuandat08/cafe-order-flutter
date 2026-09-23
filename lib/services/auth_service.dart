@@ -15,15 +15,22 @@ class AuthService {
 
   Future<AccountModel?> login(String username, String password) async {
     final hash = hashPassword(password);
+    final cleanUsername = username.trim().toLowerCase();
+    // ignore: avoid_print
+    print('[AuthService] login attempt username="$cleanUsername" hash=$hash');
     final snap = await _db
         .collection('accounts')
-        .where('username', isEqualTo: username.trim().toLowerCase())
+        .where('username', isEqualTo: cleanUsername)
         .where('active', isEqualTo: true)
         .limit(1)
         .get();
+    // ignore: avoid_print
+    print('[AuthService] query returned ${snap.docs.length} doc(s)');
 
     if (snap.docs.isEmpty) return null;
     final account = AccountModel.fromDoc(snap.docs.first);
+    // ignore: avoid_print
+    print('[AuthService] found account username=${account.username} storedHash=${account.passwordHash} inputHash=$hash match=${account.passwordHash == hash}');
     if (account.passwordHash != hash) return null;
     return account;
   }
