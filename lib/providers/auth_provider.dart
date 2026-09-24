@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/account_model.dart';
 import '../services/auth_service.dart';
@@ -38,9 +39,17 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return false;
+    } on FirebaseAuthException catch (e) {
+      // Mật khẩu đúng (API đã cấp token) nhưng đăng nhập Firebase Auth trên máy
+      // thất bại — hiện mã lỗi để biết nguyên nhân (vd: keychain-error trên macOS).
+      debugPrint('[AuthProvider] FirebaseAuth error: ${e.code} ${e.message}');
+      _error = 'Lỗi đăng nhập Firebase (${e.code}). ${e.message ?? ''}'.trim();
+      _isLoading = false;
+      notifyListeners();
+      return false;
     } catch (e) {
       debugPrint('[AuthProvider] login exception: $e');
-      _error = 'Lỗi kết nối. Vui lòng thử lại.';
+      _error = 'Lỗi đăng nhập: $e';
       _isLoading = false;
       notifyListeners();
       return false;
