@@ -32,6 +32,9 @@ import '../../services/table_service.dart';
 import '../../widgets/floor_plan_board.dart';
 import '../../services/discount_service.dart';
 import '../../services/invoice_service.dart';
+import '../../services/audit_service.dart';
+import '../../models/account_model.dart';
+import '../../widgets/manager_approval.dart';
 
 // Chuẩn hoá id bàn để gom nhóm: "T3" / "3" / "03" → "03" (khớp format tables "01".."11").
 // Giữ nguyên chuỗi không phải bàn số (vd "Mang về"); rỗng → "Bàn chưa xác định".
@@ -1717,9 +1720,22 @@ class _KDSTabState extends State<_KDSTab> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _clearingTableIds.add(clearKey));
     final orderIds = tableOrders.where((o) => _kActive.contains(o.status)).map((o) => o.id).toList();
     final totalAmount = tableOrders.fold(0.0, (s, o) => s + o.totalPrice);
+    final currentUser = context.read<AuthProvider>().currentUser;
+    // Dọn bàn CHƯA xuất bill mà bàn có tiền = đơn không vào doanh thu → bắt
+    // buộc quản lý duyệt (chống thu tiền khách rồi dọn bàn không ghi bill).
+    AccountModel? approver;
+    if (!isBilled && totalAmount > 0) {
+      approver = await requestManagerApproval(
+        context,
+        action: 'Dọn bàn $tableId chưa xuất bill — ${_vndFmt.format(totalAmount)}đ '
+            'sẽ KHÔNG được tính vào doanh thu.\nLý do: ${reasonCtrl.text.trim()}',
+      );
+      if (approver == null || !mounted) return;
+    }
+
+    setState(() => _clearingTableIds.add(clearKey));
     final firstOrderId = tableOrders.isNotEmpty ? tableOrders.first.id : null;
     try {
       // Giống web: nếu đã bill → ghi PTTT vào hóa đơn TRƯỚC khi clear
@@ -1731,6 +1747,11 @@ class _KDSTabState extends State<_KDSTab> {
         tableId, orderIds,
         clearReason: isBilled ? null : reasonCtrl.text.trim(),
         totalAmount: totalAmount,
+        staffId: currentUser?.id,
+        staffName: currentUser?.fullName,
+        staffRole: currentUser?.role,
+        approvedById: approver?.id,
+        approvedByName: approver?.fullName,
       );
       // Takeaway: KHÔNG clearTable (giữ nguyên session/QR cho đợt khách sau).
       // Bàn thường: clearTable → xoá cart + reset sessionToken → QR/URL bàn hết hiệu lực.
@@ -3040,7 +3061,87 @@ class _EditOrderDialogState extends State<_EditOrderDialog> {
     setState(() => _items.removeAt(idx));
   }
 
+  static String _itemKey(String id, String name, String? size, String? sweetness) =>
+      '$id|$name|${size ?? ''}|${sweetness ?? ''}';
+
+  /// Các món bị BỚT số lượng hoặc XÓA so với đơn gốc.
+  List<Map<String, dynamic>> _reductions() {
+    final before = <String, int>{};
+    final ref = <String, OrderItem>{};
+    for (final i in widget.order.items) {
+      final k = _itemKey(i.id, i.name, i.size, i.sweetness);
+      before[k] = (before[k] ?? 0) + i.quantity;
+      ref[k] = i;
+    }
+    final after = <String, int>{};
+    for (final e in _items) {
+      final k = _itemKey(e.id, e.name, e.size, e.sweetness);
+      after[k] = (after[k] ?? 0) + e.qty;
+    }
+    final out = <Map<String, dynamic>>[];
+    before.forEach((k, q) {
+      final a = after[k] ?? 0;
+      if (a < q) {
+        final it = ref[k]!;
+        out.add({
+          'name': it.name,
+          if (it.size != null && it.size!.isNotEmpty) 'size': it.size,
+          'price': it.price,
+          'qtyBefore': q,
+          'qtyAfter': a,
+        });
+      }
+    });
+    return out;
+  }
+
+  /// Đơn đã được xuất bill chưa (bill riêng của đơn, hoặc bill của bàn xuất
+  /// SAU khi đơn được tạo — tức bill này đã bao gồm đơn).
+  Future<bool> _isBilled() async {
+    final inv = InvoiceService();
+    final o = widget.order;
+    if (await inv.getLatestActiveForOrder(o.id) != null) return true;
+    return await inv.getLatestActiveForTable(o.tableId, sessionStart: o.createdAt) != null;
+  }
+
   Future<void> _save() async {
+    final staff = context.read<AuthProvider>().currentUser;
+    final reductions = _reductions();
+    final isDelete = _items.isEmpty;
+    String? reason;
+    AccountModel? approver;
+
+    // Hủy / bớt món → bắt buộc lý do; nếu đơn ĐÃ xuất bill → thêm quản lý duyệt
+    // (bớt món sau khi khách trả tiền là kiểu thất thoát phổ biến nhất).
+    if (reductions.isNotEmpty) {
+      final desc = reductions
+          .map((r) => '• ${r['name']}${r['size'] != null ? ' (${r['size']})' : ''}: '
+              '${r['qtyBefore']} → ${r['qtyAfter']}')
+          .join('\n');
+      reason = await promptRequiredReason(
+        context,
+        title: isDelete ? 'Xóa đơn' : 'Hủy / bớt món',
+        message: 'Nhập lý do cho thay đổi sau:\n$desc',
+      );
+      if (reason == null || !mounted) return;
+      setState(() => _saving = true);
+      final billed = await _isBilled();
+      if (!mounted) return;
+      if (billed) {
+        approver = await requestManagerApproval(
+          context,
+          action: 'Đơn này ĐÃ XUẤT BILL. ${isDelete ? 'Xóa đơn' : 'Hủy / bớt món'} '
+              '(${_vndFmt.format(widget.order.totalPrice)}đ → ${_vndFmt.format(_totalVnd)}đ).\n'
+              'Lý do: $reason',
+        );
+        if (!mounted) return;
+        if (approver == null) {
+          setState(() => _saving = false);
+          return;
+        }
+      }
+    }
+
     setState(() => _saving = true);
     try {
       final items = _items.map((e) => OrderItem(
@@ -3049,6 +3150,24 @@ class _EditOrderDialogState extends State<_EditOrderDialog> {
       )).toList();
       final vnd = _totalVnd;
       await widget.onSave(items, vnd, double.parse((vnd / 26000).toStringAsFixed(2)));
+      if (reductions.isNotEmpty) {
+        await AuditService().log(
+          action: isDelete ? AuditService.orderDeleted : AuditService.orderItemsReduced,
+          staff: staff,
+          approvedBy: approver,
+          tableId: widget.order.tableId,
+          orderId: widget.order.id,
+          reason: reason,
+          amountBefore: widget.order.totalPrice,
+          amountAfter: vnd,
+          details: {
+            'afterBill': approver != null,
+            'reducedItems': reductions,
+            // Đơn bị xóa hẳn khỏi Firestore → giữ lại bản đầy đủ để đối soát.
+            if (isDelete) 'deletedItems': widget.order.items.map((i) => i.toMap()).toList(),
+          },
+        );
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -3782,6 +3901,7 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
   final _vatCtrl = TextEditingController(text: '0');
   final _serviceCtrl = TextEditingController(text: '0');
   bool _saveRevenue = true;
+  AccountModel? _revenueApprover; // admin đã duyệt "không lưu doanh thu"
   bool _printing = false;
 
   double get _subtotal =>
@@ -3821,6 +3941,24 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
       return;
     }
     setState(() => _printing = true);
+    if (!_saveRevenue) {
+      // In bill nhưng KHÔNG ghi vào doanh thu → luôn để lại dấu vết.
+      AuditService().log(
+        action: AuditService.invoiceNotSaved,
+        staff: context.read<AuthProvider>().currentUser,
+        approvedBy: _revenueApprover,
+        tableId: widget.tableId,
+        orderId: widget.tableOrders.isNotEmpty ? widget.tableOrders.first.id : null,
+        amountBefore: _total,
+        details: {
+          'orderIds': widget.tableOrders.map((o) => o.id).toList(),
+          'items': widget.tableOrders
+              .expand((o) => o.items)
+              .map((i) => i.toMap())
+              .toList(),
+        },
+      );
+    }
     await widget.onPrint({
       'vat': _vat,
       'serviceCharge': _service,
@@ -4090,48 +4228,30 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
   // Tắt "Tự động lưu vào doanh thu" cần mật khẩu quản lý — giống hệt bản web
   // (InvoiceModal.jsx: handleToggleSave) để tránh nhân viên tùy tiện bỏ qua
   // ghi nhận doanh thu. Bật lại thì không cần mật khẩu.
-  static const _kManagerPassword = 'emcoffee@';
 
   Future<void> _handleToggleSaveRevenue() async {
     if (_saveRevenue) {
-      final password = await _promptManagerPassword();
-      if (password == null) return; // người dùng bấm Hủy
-      if (password == _kManagerPassword) {
-        setState(() => _saveRevenue = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Đã mở khóa chỉnh sửa!'), backgroundColor: Color(0xFF059669)));
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Mật khẩu không đúng!'), backgroundColor: Color(0xFFDC2626)));
-        }
-      }
+      // Trước đây dùng mật khẩu cố định ghi trong code (ai giải nén app cũng
+      // đọc được) → nay phải là mật khẩu của 1 tài khoản admin thật, và lưu
+      // lại người duyệt để ghi nhật ký khi in.
+      final approver = await requestManagerApproval(
+        context,
+        action: 'Hủy lưu doanh thu cho hóa đơn bàn ${widget.tableId} '
+            '(${_vndFmt.format(_total)}đ).',
+      );
+      if (approver == null || !mounted) return;
+      setState(() {
+        _saveRevenue = false;
+        _revenueApprover = approver;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Đã mở khóa chỉnh sửa!'), backgroundColor: Color(0xFF059669)));
     } else {
-      setState(() => _saveRevenue = true);
+      setState(() {
+        _saveRevenue = true;
+        _revenueApprover = null;
+      });
     }
-  }
-
-  Future<String?> _promptManagerPassword() async {
-    final ctrl = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Nhập mật khẩu quản lý'),
-        content: TextField(
-          controller: ctrl,
-          obscureText: true,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Mật khẩu để hủy lưu doanh thu'),
-          onSubmitted: (v) => Navigator.pop(ctx, v),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Hủy')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: const Text('Xác nhận')),
-        ],
-      ),
-    );
   }
 
   String? get _qrUrl {
@@ -4651,9 +4771,22 @@ class _TableBoardTabState extends State<_TableBoardTab> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _clearingTableIds.add(clearKey));
     final orderIds = tableOrders.where((o) => _kActive.contains(o.status)).map((o) => o.id).toList();
     final totalAmount = tableOrders.fold(0.0, (s, o) => s + o.totalPrice);
+    final currentUser = context.read<AuthProvider>().currentUser;
+    // Dọn bàn CHƯA xuất bill mà bàn có tiền = đơn không vào doanh thu → bắt
+    // buộc quản lý duyệt (chống thu tiền khách rồi dọn bàn không ghi bill).
+    AccountModel? approver;
+    if (!isBilled && totalAmount > 0) {
+      approver = await requestManagerApproval(
+        context,
+        action: 'Dọn bàn $tableId chưa xuất bill — ${_vndFmt.format(totalAmount)}đ '
+            'sẽ KHÔNG được tính vào doanh thu.\nLý do: ${reasonCtrl.text.trim()}',
+      );
+      if (approver == null || !mounted) return;
+    }
+
+    setState(() => _clearingTableIds.add(clearKey));
     final firstOrderId = tableOrders.isNotEmpty ? tableOrders.first.id : null;
     try {
       if (isBilled && firstOrderId != null) {
@@ -4663,6 +4796,11 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         tableId, orderIds,
         clearReason: isBilled ? null : reasonCtrl.text.trim(),
         totalAmount: totalAmount,
+        staffId: currentUser?.id,
+        staffName: currentUser?.fullName,
+        staffRole: currentUser?.role,
+        approvedById: approver?.id,
+        approvedByName: approver?.fullName,
       );
       if (!isTakeaway) {
         try {

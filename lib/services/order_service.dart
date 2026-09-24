@@ -89,6 +89,8 @@ class OrderService {
     String? staffId,
     String? staffName,
     String? staffRole,
+    String? approvedById,
+    String? approvedByName,
   }) async {
     final clearedAt = Timestamp.fromDate(DateTime.now());
     // 1. Đóng tất cả đơn
@@ -115,6 +117,8 @@ class OrderService {
         if (staffId != null) 'staffId': staffId,
         if (staffName != null) 'staffName': staffName,
         if (staffRole != null) 'staffRole': staffRole,
+        if (approvedById != null) 'approvedById': approvedById,
+        if (approvedByName != null) 'approvedByName': approvedByName,
       });
     }
   }

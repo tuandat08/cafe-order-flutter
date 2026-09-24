@@ -60,6 +60,22 @@ class AuthService {
     });
   }
 
+  /// Xác thực mật khẩu của 1 tài khoản ADMIN đang hoạt động — dùng cho các
+  /// thao tác cần quản lý duyệt (thay cho mật khẩu cố định ghi trong code).
+  /// Trả về tài khoản admin khớp mật khẩu, hoặc null nếu không khớp.
+  Future<AccountModel?> verifyManagerPassword(String password) async {
+    final hash = hashPassword(password);
+    final snap = await _db
+        .collection('accounts')
+        .where('role', isEqualTo: 'admin')
+        .get();
+    for (final d in snap.docs) {
+      final acc = AccountModel.fromDoc(d);
+      if (acc.active && acc.passwordHash == hash) return acc;
+    }
+    return null;
+  }
+
   Future<void> updatePassword(String id, String newPassword) async {
     final hash = hashPassword(newPassword);
     await _db.collection('accounts').doc(id).update({
