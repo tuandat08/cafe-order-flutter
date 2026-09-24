@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../core/config.dart';
 import '../models/account_model.dart';
@@ -23,10 +24,17 @@ class AuthService {
   /// Trả về null nếu sai tên đăng nhập / mật khẩu; ném [AuthApiException] cho
   /// các lỗi khác (bị khóa tạm, mất mạng, lỗi máy chủ).
   Future<AccountModel?> login(String username, String password) async {
-    final res = await _post('/api/login', {
-      'username': username.trim(),
-      'password': password,
-    });
+    final http.Response res;
+    try {
+      res = await _post('/api/login', {
+        'username': username.trim(),
+        'password': password,
+      });
+    } on AuthApiException {
+      if (!kLegacyAuthFallback) rethrow;
+      return _legacyLogin(username, password);
+    }
+    if (kLegacyAuthFallback && _apiNotReady(res)) return _legacyLogin(username, password);
     if (res.statusCode == 401) return null;
     final data = _decode(res);
     if (res.statusCode != 200) throw AuthApiException(_errorOf(data));
@@ -50,7 +58,16 @@ class AuthService {
   /// đọc bảng accounts. Trả về tài khoản admin đã duyệt, hoặc null nếu sai.
   Future<AccountModel?> verifyManagerPassword(String password) async {
     final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
-    final res = await _post('/api/verify-manager', {'password': password}, idToken: idToken);
+    final http.Response res;
+    try {
+      res = await _post('/api/verify-manager', {'password': password}, idToken: idToken);
+    } on AuthApiException {
+      if (!kLegacyAuthFallback) rethrow;
+      return _legacyVerifyManager(password);
+    }
+    if (kLegacyAuthFallback && (_apiNotReady(res) || idToken == null)) {
+      return _legacyVerifyManager(password);
+    }
     if (res.statusCode == 401 && idToken != null) {
       final data = _decode(res);
       if (_errorOf(data).contains('Mật khẩu')) return null;
@@ -84,6 +101,45 @@ class AuthService {
     } catch (_) {
       throw const AuthApiException('Không kết nối được máy chủ đăng nhập. Kiểm tra mạng và thử lại.');
     }
+  }
+
+  /// API chưa sẵn sàng: 404 của Vercel (chưa deploy), lỗi máy chủ, hoặc không
+  /// phải JSON của API.
+  static bool _apiNotReady(http.Response res) {
+    if (res.statusCode == 404 || res.statusCode >= 500) return true;
+    try {
+      jsonDecode(res.body);
+      return false;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // ── TẠM THỜI: đăng nhập / duyệt kiểu CŨ khi API chưa chạy được ──────────────
+  // Chỉ hoạt động khi Firestore rules còn mở. Tắt bằng kLegacyAuthFallback = false
+  // (lib/core/config.dart) trước khi bật rules mới.
+  Future<AccountModel?> _legacyLogin(String username, String password) async {
+    debugPrint('[AuthService] API không phản hồi → đăng nhập dự phòng');
+    final hash = hashPassword(password);
+    final snap = await _db
+        .collection('accounts')
+        .where('username', isEqualTo: username.trim().toLowerCase())
+        .where('active', isEqualTo: true)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return null;
+    final account = AccountModel.fromDoc(snap.docs.first);
+    return account.passwordHash == hash ? account : null;
+  }
+
+  Future<AccountModel?> _legacyVerifyManager(String password) async {
+    final hash = hashPassword(password);
+    final snap = await _db.collection('accounts').where('role', isEqualTo: 'admin').get();
+    for (final d in snap.docs) {
+      final acc = AccountModel.fromDoc(d);
+      if (acc.active && acc.passwordHash == hash) return acc;
+    }
+    return null;
   }
 
   static Map<String, dynamic> _decode(http.Response res) {
