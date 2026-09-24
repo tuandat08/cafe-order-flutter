@@ -136,6 +136,24 @@ pw.Widget _pdfRow(String label, String value) => pw.Row(
 
 final _vndFmt = NumberFormat('#,###', 'vi_VN');
 
+/// Bàn [t] đã xuất bill cho TẤT CẢ [orders] đang hiện hay chưa.
+/// - [localIds]: mã đơn trong bill vừa in trên máy này (chưa kịp đồng bộ).
+/// - Bill in từ bản mới lưu `lastBilledOrderIds` → so đúng từng mã đơn.
+/// - Bill cũ (chỉ có `lastBilledAt`) → đơn tạo sau lúc in bill (cho sai lệch
+///   đồng hồ 60 giây) không thuộc bill.
+bool _tableBilledFor(TableModel? t, Set<String>? localIds, List<OrderModel> orders) {
+  if (orders.isEmpty) return false;
+  if (localIds != null) return orders.every((o) => localIds.contains(o.id));
+  final billedAt = t?.lastBilledAt;
+  if (t == null || billedAt == null) return false;
+  final cleared = t.clearedAt;
+  if (cleared != null && !billedAt.isAfter(cleared)) return false; // đã dọn sau lần bill cuối
+  final ids = t.lastBilledOrderIds;
+  if (ids != null) return orders.every((o) => ids.contains(o.id));
+  final limit = billedAt.add(const Duration(seconds: 60));
+  return orders.every((o) => o.createdAt != null && !o.createdAt!.isAfter(limit));
+}
+
 // Font in hóa đơn PDF — đóng gói sẵn trong app (assets/fonts, Roboto đủ dấu tiếng
 // Việt). Trước đây tải từ Google Fonts MỖI LẦN IN → mất mạng thì chữ có dấu bị lỗi.
 // Nạp 1 lần rồi dùng lại.
@@ -1169,7 +1187,9 @@ class _KDSTabState extends State<_KDSTab> {
   final Set<String> _clearingTableIds = {};
 
   // Bàn đã xuất bill (giống billedTableIds trong web — local state)
-  final Set<String> _billedTableIds = {};
+  // Bàn/thẻ vừa xuất bill trên máy này (hiển thị ngay, chưa chờ Firestore):
+  // key → mã các đơn nằm trong bill đó.
+  final Map<String, Set<String>> _billedOrderIds = {};
 
   // ── Âm thanh + giọng đọc (giống useAudioNotification web) ──
   final AudioPlayer _notifPlayer = AudioPlayer();
@@ -1378,16 +1398,11 @@ class _KDSTabState extends State<_KDSTab> {
     return match;
   }
 
-  // Bàn đã xuất bill — giống web billedTableIds:
-  // lastBilledAt tồn tại và (chưa dọn bao giờ | lastBilledAt > clearedAt)
-  // + overlay local (optimistic ngay sau khi xuất bill)
-  bool _isBilled(String tableId) {
-    if (_billedTableIds.contains(tableId)) return true;
-    final t = _findTable(tableId);
-    if (t?.lastBilledAt == null) return false;
-    final cleared = t!.clearedAt;
-    return cleared == null || t.lastBilledAt!.isAfter(cleared);
-  }
+  // Bàn đã xuất bill CHO CÁC ĐƠN ĐANG HIỆN — bill chỉ bao gồm những đơn có lúc
+  // in bill; khách gọi thêm đơn SAU đó thì bàn quay lại "chưa xuất bill" (trước
+  // đây tính theo cả bàn → đơn mới cũng bị hiện "đã xuất bill").
+  bool _isBilled(String tableId, List<OrderModel> orders) =>
+      _tableBilledFor(_findTable(tableId), _billedOrderIds[tableId], orders);
 
   // Bàn đang gọi phục vụ — giống web serviceRequestTableIds
   bool _hasServiceRequest(String tableId) => _findTable(tableId)?.serviceRequest != null;
@@ -1480,14 +1495,15 @@ class _KDSTabState extends State<_KDSTab> {
                staffName: staffName, staffId: staffId, invoiceId: previewInvoiceId);
             // Takeaway: KHÔNG ghi lastBilledAt lên bàn chung (tránh mọi thẻ mang về bị "đã bill")
             if (!isTakeaway) {
-              await _orderService.updateTableLastBilledAt(tableId);
+              await _orderService.updateTableLastBilledAt(tableId,
+                  orderIds: tableOrders.map((o) => o.id).toList());
             }
             final actId = act?['id'];
             if (actId != null) {
               await _discountService.incrementUsage(actId.toString());
             }
           }
-          if (mounted) setState(() => _billedTableIds.add(billKey));
+          if (mounted) setState(() => _billedOrderIds[billKey] = tableOrders.map((o) => o.id).toSet());
           // In hóa đơn (mở hộp thoại in của hệ thống)
           try {
             await _printInvoice(tableId, tableOrders, data,
@@ -1739,7 +1755,7 @@ class _KDSTabState extends State<_KDSTab> {
           debugPrint('[KDS] clearTable error: $e');
         }
       }
-      if (mounted) setState(() => _billedTableIds.remove(clearKey));
+      if (mounted) setState(() => _billedOrderIds.remove(clearKey));
     } finally {
       if (mounted) setState(() => _clearingTableIds.remove(clearKey));
     }
@@ -1945,7 +1961,7 @@ class _KDSTabState extends State<_KDSTab> {
                       final isAllCompleted = tableOrders.every((o) => _isDone(o.status));
                       final isClearing = _clearingTableIds.contains(cardKey);
                       // Takeaway: theo dõi billed theo từng thẻ (đơn); bàn thường: theo bàn
-                      final isBilled   = takeaway ? _billedTableIds.contains(cardKey) : _isBilled(tableId);
+                      final isBilled   = takeaway ? _billedOrderIds.containsKey(cardKey) : _isBilled(tableId, tableOrders);
                       final hasServiceRequest = takeaway ? false : _hasServiceRequest(tableId);
                       // Nhãn thẻ: bàn thường hiện "Bàn: 03"; takeaway hiện "Mang về • #<mã đơn>"
                       final String? displayLabel = takeaway
@@ -4300,7 +4316,9 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   List<DiscountModel> _discounts = [];
   List<OrderModel> _activeOrders = [];
   final Set<String> _clearingTableIds = {};
-  final Set<String> _billedTableIds = {};
+  // Bàn/thẻ vừa xuất bill trên máy này (hiển thị ngay, chưa chờ Firestore):
+  // key → mã các đơn nằm trong bill đó.
+  final Map<String, Set<String>> _billedOrderIds = {};
   bool _loaded = false;
 
   String _statusFilter = 'Đặt Món'; // mặc định
@@ -4416,13 +4434,11 @@ class _TableBoardTabState extends State<_TableBoardTab> {
     return match;
   }
 
-  bool _isBilled(String tableId) {
-    if (_billedTableIds.contains(tableId)) return true;
-    final t = _findTable(tableId);
-    if (t?.lastBilledAt == null) return false;
-    final cleared = t!.clearedAt;
-    return cleared == null || t.lastBilledAt!.isAfter(cleared);
-  }
+  // Bàn đã xuất bill CHO CÁC ĐƠN ĐANG HIỆN — bill chỉ bao gồm những đơn có lúc
+  // in bill; khách gọi thêm đơn SAU đó thì bàn quay lại "chưa xuất bill" (trước
+  // đây tính theo cả bàn → đơn mới cũng bị hiện "đã xuất bill").
+  bool _isBilled(String tableId, List<OrderModel> orders) =>
+      _tableBilledFor(_findTable(tableId), _billedOrderIds[tableId], orders);
 
   bool _hasServiceRequest(String tableId) => _findTable(tableId)?.serviceRequest != null;
 
@@ -4435,7 +4451,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   // Đơn mang về đã xuất bill? Ưu tiên set tạm; nếu không, tra hóa đơn thật theo ĐÚNG orderId.
   // Nhờ đó không bị mất trạng thái sau restart và không nhầm giữa các đơn mang về.
   bool _isTakeawayBilled(String key, List<OrderModel> orders) {
-    if (_billedTableIds.contains(key)) return true;
+    if (_billedOrderIds.containsKey(key)) return true;
     if (orders.isEmpty) return false;
     final oid = orders.first.id;
     return _todayInvoices.any((inv) => inv['orderId'] == oid);
@@ -4520,14 +4536,15 @@ class _TableBoardTabState extends State<_TableBoardTab> {
             }, reason: data['reason'], previousInvoiceId: data['previousInvoiceId'],
                staffName: staffName, staffId: staffId, invoiceId: previewInvoiceId);
             if (!isTakeaway) {
-              await _orderService.updateTableLastBilledAt(tableId);
+              await _orderService.updateTableLastBilledAt(tableId,
+                  orderIds: tableOrders.map((o) => o.id).toList());
             }
             final actId = act?['id'];
             if (actId != null) {
               await _discountService.incrementUsage(actId.toString());
             }
           }
-          if (mounted) setState(() => _billedTableIds.add(billKey));
+          if (mounted) setState(() => _billedOrderIds[billKey] = tableOrders.map((o) => o.id).toSet());
           try {
             await _printInvoice(tableId, tableOrders, data,
                 staffName: staffName, checkInAt: sessionStart, invoiceId: invoiceId);
@@ -4771,7 +4788,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
           debugPrint('[BOARD] clearTable error: $e');
         }
       }
-      if (mounted) setState(() => _billedTableIds.remove(clearKey));
+      if (mounted) setState(() => _billedOrderIds.remove(clearKey));
     } finally {
       if (mounted) setState(() => _clearingTableIds.remove(clearKey));
     }
@@ -5146,7 +5163,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         : _calcDiscount(_findTable(base)?.activeDiscount, subtotal);
     final net = subtotal - disc;
     final allDone = orders.every((o) => _isDone(o.status));
-    final billed = takeaway ? _isTakeawayBilled(key, orders) : _isBilled(base);
+    final billed = takeaway ? _isTakeawayBilled(key, orders) : _isBilled(base, orders);
     final service = !takeaway && _hasServiceRequest(base);
     final itemCount = orders.fold<int>(0, (s, o) => s + o.items.fold<int>(0, (a, i) => a + i.quantity));
 
@@ -5409,7 +5426,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         : _calcDiscount(activeDisc, subtotal);
     final net = subtotal - disc;
     final allDone = orders.every((o) => _isDone(o.status));
-    final billed = takeaway ? _isTakeawayBilled(key, orders) : _isBilled(base);
+    final billed = takeaway ? _isTakeawayBilled(key, orders) : _isBilled(base, orders);
     final service = !takeaway && _hasServiceRequest(base);
     final isClearing = _clearingTableIds.contains(key);
 

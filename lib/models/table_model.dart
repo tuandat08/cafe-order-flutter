@@ -10,6 +10,9 @@ class TableModel {
   final DateTime? serviceRequest; // web: tables.serviceRequest (đang gọi phục vụ)
   final DateTime? lastBilledAt;   // web: tables.lastBilledAt (đã xuất bill)
   final DateTime? clearedAt;      // web: tables.clearedAt (lần dọn bàn gần nhất)
+  /// Mã các đơn nằm trong bill in gần nhất — đơn đặt SAU khi in bill không có
+  /// trong danh sách này → bàn chưa được coi là đã xuất bill cho đơn mới đó.
+  final List<String>? lastBilledOrderIds;
   final bool isTakeaway;          // web: tables.type == 'takeaway' (bàn mang về)
 
   TableModel({
@@ -22,6 +25,7 @@ class TableModel {
     this.serviceRequest,
     this.lastBilledAt,
     this.clearedAt,
+    this.lastBilledOrderIds,
     this.isTakeaway = false,
   });
 
@@ -51,6 +55,9 @@ class TableModel {
       serviceRequest: _ts(data['serviceRequest']),
       lastBilledAt: _ts(data['lastBilledAt']),
       clearedAt: _ts(data['clearedAt']),
+      lastBilledOrderIds: data['lastBilledOrderIds'] is List
+          ? (data['lastBilledOrderIds'] as List).map((e) => e.toString()).toList()
+          : null,
       isTakeaway: data['type'] == 'takeaway',
     );
   }
@@ -78,6 +85,7 @@ class TableModel {
       currentOrderId: currentOrderId,
       activeDiscount: clearDiscount ? null : (activeDiscount ?? this.activeDiscount),
       serviceRequest: serviceRequest, lastBilledAt: lastBilledAt, clearedAt: clearedAt,
+      lastBilledOrderIds: lastBilledOrderIds,
       isTakeaway: isTakeaway,
     );
   }

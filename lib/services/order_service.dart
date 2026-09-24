@@ -132,11 +132,15 @@ class OrderService {
     }
   }
 
-  // Ghi nhận bàn đã xuất bill (giống web updateTableLastBilledAt)
-  Future<void> updateTableLastBilledAt(String tableId) async {
+  // Ghi nhận bàn đã xuất bill (giống web updateTableLastBilledAt) + danh sách
+  // đơn nằm trong bill — để đơn đặt thêm SAU khi in bill không bị coi là đã bill.
+  Future<void> updateTableLastBilledAt(String tableId, {List<String>? orderIds}) async {
     final tableRef = await _resolveTableRef(tableId);
     if (tableRef != null) {
-      await writeLocal(tableRef.update({'lastBilledAt': Timestamp.fromDate(DateTime.now())}));
+      await writeLocal(tableRef.update({
+        'lastBilledAt': Timestamp.fromDate(DateTime.now()),
+        if (orderIds != null) 'lastBilledOrderIds': orderIds,
+      }));
     }
   }
 
