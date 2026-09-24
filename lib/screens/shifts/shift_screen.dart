@@ -445,11 +445,14 @@ class _OpenShiftGateScreenState extends State<OpenShiftGateScreen> {
 class StaleShiftGateScreen extends StatefulWidget {
   final ShiftModel shift;
   final ShiftService shiftService;
+  /// false = ca bỏ dở của NGƯỜI KHÁC (tài khoản đăng nhập trước đó chưa đóng ca).
+  final bool isOwnShift;
 
   const StaleShiftGateScreen({
     super.key,
     required this.shift,
     required this.shiftService,
+    this.isOwnShift = true,
   });
 
   @override
@@ -522,6 +525,7 @@ class _StaleShiftGateScreenState extends State<StaleShiftGateScreen> {
         closingCashCounted: _counted,
         note: _noteCtrl.text.trim().isEmpty
             ? 'Tu dong phat hien: ca bi bo do tu phien truoc (thoat app khong dang xuat/dong ca), da bat buoc kiem ca thu cong.'
+                '${widget.isOwnShift ? '' : ' Nguoi dong ho: ${context.read<AuthProvider>().currentUser?.fullName ?? ''}.'}'
             : _noteCtrl.text.trim(),
       );
     } catch (e) {
@@ -569,7 +573,7 @@ class _StaleShiftGateScreenState extends State<StaleShiftGateScreen> {
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       Text(
-                        'Ca của bạn (${widget.shift.staffName}) mở lúc '
+                        '${widget.isOwnShift ? 'Ca của bạn (${widget.shift.staffName})' : 'Ca của ${widget.shift.staffName} (tài khoản đăng nhập trước)'} mở lúc '
                         '${_dateFmt.format(widget.shift.openedAt)} vẫn đang ở trạng thái '
                         'mở — có thể do ứng dụng đã bị thoát trước khi đóng ca. '
                         'Vui lòng đếm và nhập tiền mặt thực tế trong ngăn kéo để đóng ca này trước khi tiếp tục sử dụng ứng dụng.',
