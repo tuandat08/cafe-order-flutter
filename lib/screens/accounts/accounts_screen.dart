@@ -94,12 +94,22 @@ class AccountsScreen extends StatelessWidget {
                       if (acc == null) {
                         // Create new
                         if (passCtrl.text.isEmpty) return;
-                        await authService.createAccount(
-                          username: username,
-                          password: passCtrl.text,
-                          fullName: name,
-                          role: role,
-                        );
+                        try {
+                          await authService.createAccount(
+                            username: username,
+                            password: passCtrl.text,
+                            fullName: name,
+                            role: role,
+                          );
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                              content: Text(e is AuthApiException ? e.message : 'Tạo tài khoản thất bại: $e'),
+                              backgroundColor: Colors.red,
+                            ));
+                          }
+                          return;
+                        }
                       } else {
                         // Update existing
                         await authService.updateAccount(acc.id, {

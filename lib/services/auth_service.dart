@@ -159,9 +159,21 @@ class AuthService {
     required String fullName,
     required String role,
   }) async {
+    // Không phân biệt hoa/thường ('Admin' trùng 'admin') — chặn 2 tài khoản
+    // trùng tên (API đăng nhập sẽ không biết chọn tài khoản nào).
+    final uname = username.trim().toLowerCase();
+    if (uname.isEmpty) throw const AuthApiException('Vui lòng nhập tên đăng nhập');
+    if (RegExp(r'\s').hasMatch(uname)) {
+      throw const AuthApiException('Tên đăng nhập không được chứa khoảng trắng');
+    }
+    final all = await _db.collection('accounts').get();
+    final exists = all.docs.any(
+        (d) => (d.data()['username'] ?? '').toString().trim().toLowerCase() == uname);
+    if (exists) throw const AuthApiException('Tên đăng nhập đã tồn tại');
+
     final hash = hashPassword(password);
     await _db.collection('accounts').add({
-      'username': username.trim().toLowerCase(),
+      'username': uname,
       'passwordHash': hash,
       'fullName': fullName.trim(),
       'role': role,
