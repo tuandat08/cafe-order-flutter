@@ -178,6 +178,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 3, vsync: this, initialIndex: 2);
   int _tabIndex = 2; // mặc định mở tab "Bàn (POS)" (đã ẩn tab "Đơn hàng")
+  bool _floorPlanOpen = false; // đang mở sơ đồ bàn → nút "Sơ đồ bàn" sáng thay cho tab
   bool _soundEnabled = true; // bật/tắt âm thanh thông báo — icon chuông trên top bar
   final _posTabKey = GlobalKey<_POSTabState>(); // để nút "Sơ đồ bàn" ở top bar gọi chọn bàn vào tab POS
 
@@ -377,12 +378,27 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   Widget _tabBtn(int idx, IconData icon, String label) {
-    final active = _tabIndex == idx;
-    return GestureDetector(
+    return _headerTabButton(
+      icon: icon,
+      label: label,
+      active: _tabIndex == idx && !_floorPlanOpen,
       onTap: () {
         _tab.animateTo(idx);
         setState(() => _tabIndex = idx);
       },
+    );
+  }
+
+  /// Kiểu nút chung của thanh trên (Bàn (POS) · POS - Tạo đơn · Sơ đồ bàn):
+  /// đang chọn → nền nâu chữ trắng; không chọn → chữ xám nền trong suốt.
+  Widget _headerTabButton({
+    required IconData icon,
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -408,35 +424,29 @@ class _OrdersScreenState extends State<OrdersScreen>
   // "POS - Tạo đơn". Bấm vào 1 bàn trên sơ đồ sẽ chuyển sang tab POS và chọn
   // luôn bàn đó cho đơn đang tạo.
   Widget _floorPlanBtn() {
-    return GestureDetector(
+    return _headerTabButton(
+      icon: Icons.map_rounded,
+      label: 'Sơ đồ bàn',
+      active: _floorPlanOpen,
       onTap: () async {
         _tab.animateTo(0);
-        setState(() => _tabIndex = 0);
+        setState(() {
+          _tabIndex = 0;
+          _floorPlanOpen = true;
+        });
         final selected = await showDialog<String>(
           context: context,
           builder: (ctx) => const FloorPlanPickerDialog(),
         );
+        if (!mounted) return;
+        setState(() => _floorPlanOpen = false);
         if (selected != null && selected.isNotEmpty) {
           _posTabKey.currentState?.selectTableFromFloorPlan(selected);
         }
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.divider),
-        ),
-        child: const Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.map_rounded, size: 16, color: AppColors.textSecondary),
-          SizedBox(width: 6),
-          Text('Sơ đồ bàn', style: TextStyle(
-            color: AppColors.textSecondary, fontWeight: FontWeight.w500, fontSize: 13,
-          )),
-        ]),
-      ),
     );
   }
+
 }
 
 // ═══════════════════════════════════════════════════════
