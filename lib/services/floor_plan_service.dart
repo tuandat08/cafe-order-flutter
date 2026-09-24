@@ -15,7 +15,12 @@ class FloorPlanService {
   // bàn, dialog chọn bàn...), KHÔNG dựa vào field status trên chính doc bàn
   // (field đó có thể không được cập nhật đồng bộ theo thời gian thực).
   Stream<Set<String>> streamOccupiedTableIds() {
-    return _db.collection('orders').snapshots().map((s) {
+    // Chỉ tải đơn đang hoạt động (lọc trên server), không tải toàn bộ lịch sử.
+    return _db
+        .collection('orders')
+        .where('status', whereIn: kActiveOrderStatuses.toList())
+        .snapshots()
+        .map((s) {
       final occ = <String>{};
       for (final d in s.docs) {
         final data = d.data();

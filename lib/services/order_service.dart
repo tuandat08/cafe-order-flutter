@@ -1,14 +1,22 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'floor_plan_service.dart' show kActiveOrderStatuses;
 import '../models/order_model.dart';
+
+/// Chỉ các đơn ĐANG HOẠT ĐỘNG — lọc ngay trên server (whereIn trên 1 field,
+/// Firestore tự có index, không cần tạo composite index) thay vì tải TOÀN BỘ
+/// lịch sử đơn về máy rồi mới lọc: số đơn cũ tăng mãi theo thời gian sẽ làm app
+/// chậm dần và tốn lượt đọc Firestore.
+Query<Map<String, dynamic>> activeOrdersQuery() => FirebaseFirestore.instance
+    .collection('orders')
+    .where('status', whereIn: kActiveOrderStatuses.toList());
 
 class OrderService {
   final _db = FirebaseFirestore.instance;
 
-  // ─── Active orders: filter + sort hoàn toàn client-side ─────────────
-  // Không dùng whereIn/orderBy trên Firestore → không cần composite index.
+  // ─── Active orders: lọc trạng thái trên server, sắp xếp client-side ──
   Stream<List<OrderModel>> streamActiveOrders() {
-    return _db.collection('orders').snapshots().map((snap) {
+    return activeOrdersQuery().snapshots().map((snap) {
       const active = {'pending', 'preparing', 'ready', 'served'};
       final list = <OrderModel>[];
       for (final doc in snap.docs) {

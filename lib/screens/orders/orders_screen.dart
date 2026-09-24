@@ -442,7 +442,7 @@ class _POSTabState extends State<_POSTab> {
   @override
   void initState() {
     super.initState();
-    _ordersSub = FirebaseFirestore.instance.collection('orders').snapshots().listen((snap) {
+    _ordersSub = activeOrdersQuery().snapshots().listen((snap) {
       final occ = <String>{};
       for (final d in snap.docs) {
         final data = d.data();
@@ -1245,7 +1245,7 @@ class _KDSTabState extends State<_KDSTab> {
       debugPrint('[KDS] discounts stream error: $e');
     });
     // MỘT listener DUY NHẤT cho orders — vừa dựng UI vừa phát chuông đơn mới
-    _ordersAudioSub = FirebaseFirestore.instance.collection('orders').snapshots().listen((snap) {
+    _ordersAudioSub = activeOrdersQuery().snapshots().listen((snap) {
       final active = <OrderModel>[];
       for (final d in snap.docs) {
         try {
@@ -4308,28 +4308,12 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   void initState() {
     super.initState();
     _ticker = Timer.periodic(const Duration(minutes: 1), (_) {
+      // Qua ngày mới → đăng ký lại để chỉ lấy hóa đơn của ngày mới.
+      final now = DateTime.now();
+      if (_invoiceDay != DateTime(now.year, now.month, now.day)) _subscribeTodayInvoices();
       if (mounted) setState(() {});
     });
-    // Hóa đơn đã xuất trong NGÀY HIỆN TẠI (lọc client-side)
-    _invoiceSub = FirebaseFirestore.instance.collection('invoices').snapshots().listen((snap) {
-      final now = DateTime.now();
-      final todayStart = DateTime(now.year, now.month, now.day);
-      final list = <Map<String, dynamic>>[];
-      for (final d in snap.docs) {
-        final m = <String, dynamic>{'id': d.id, ...d.data()};
-        if (m['status'] == 'superseded') continue;
-        final ts = m['createdAt'];
-        final dt = ts is Timestamp ? ts.toDate() : null;
-        if (dt == null || dt.isBefore(todayStart)) continue;
-        list.add(m);
-      }
-      list.sort((a, b) {
-        final ta = a['createdAt'] is Timestamp ? (a['createdAt'] as Timestamp).seconds : 0;
-        final tb = b['createdAt'] is Timestamp ? (b['createdAt'] as Timestamp).seconds : 0;
-        return tb.compareTo(ta);
-      });
-      if (mounted) setState(() => _todayInvoices = list);
-    }, onError: (e) => debugPrint('[BOARD] invoices: $e'));
+    _subscribeTodayInvoices();
     _menuSub = _menuService.streamMenuItems().listen((items) {
       if (mounted) setState(() => _menuCache = {for (final m in items) m.id: m});
     });
@@ -4346,7 +4330,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
       }).toList();
       if (mounted) setState(() => _discounts = filtered);
     }, onError: (e) => debugPrint('[BOARD] discounts: $e'));
-    _ordersSub = FirebaseFirestore.instance.collection('orders').snapshots().listen((snap) {
+    _ordersSub = activeOrdersQuery().snapshots().listen((snap) {
       final active = <OrderModel>[];
       for (final d in snap.docs) {
         try {
@@ -4361,6 +4345,38 @@ class _TableBoardTabState extends State<_TableBoardTab> {
     }, onError: (e) {
       if (mounted) setState(() => _loaded = true);
     });
+  }
+
+  DateTime? _invoiceDay;
+
+  /// Hóa đơn đã xuất trong NGÀY HIỆN TẠI — lọc theo createdAt ngay trên server
+  /// (1 field, không cần composite index) thay vì tải toàn bộ lịch sử hóa đơn.
+  void _subscribeTodayInvoices() {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    _invoiceDay = todayStart;
+    _invoiceSub?.cancel();
+    _invoiceSub = FirebaseFirestore.instance
+        .collection('invoices')
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
+        .snapshots()
+        .listen((snap) {
+      final list = <Map<String, dynamic>>[];
+      for (final d in snap.docs) {
+        final m = <String, dynamic>{'id': d.id, ...d.data()};
+        if (m['status'] == 'superseded') continue;
+        final ts = m['createdAt'];
+        final dt = ts is Timestamp ? ts.toDate() : null;
+        if (dt == null || dt.isBefore(todayStart)) continue;
+        list.add(m);
+      }
+      list.sort((a, b) {
+        final ta = a['createdAt'] is Timestamp ? (a['createdAt'] as Timestamp).seconds : 0;
+        final tb = b['createdAt'] is Timestamp ? (b['createdAt'] as Timestamp).seconds : 0;
+        return tb.compareTo(ta);
+      });
+      if (mounted) setState(() => _todayInvoices = list);
+    }, onError: (e) => debugPrint('[BOARD] invoices: $e'));
   }
 
   @override

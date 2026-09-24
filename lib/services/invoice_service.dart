@@ -18,15 +18,19 @@ class InvoiceService {
     try {
       final now = DateTime.now();
       final todayStart = DateTime(now.year, now.month, now.day);
+      // Chỉ lấy hóa đơn TỪ ĐẦU NGÀY (lọc createdAt trên server, 1 field → không
+      // cần composite index) rồi lọc bàn ở máy — trước đây lọc theo tableId nên
+      // tải TOÀN BỘ hóa đơn từ trước tới nay của bàn, càng dùng lâu càng chậm.
       final snap = await _db
           .collection('invoices')
-          .where('tableId', isEqualTo: tableId)
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
           .get();
       if (snap.docs.isEmpty) return null;
 
       final list = <Map<String, dynamic>>[];
       for (final d in snap.docs) {
         final inv = <String, dynamic>{'id': d.id, ...d.data()};
+        if ('${inv['tableId']}' != tableId) continue;
         if (inv['status'] == 'superseded') continue;
         final ts = inv['createdAt'];
         final dt = ts is Timestamp ? ts.toDate() : null;
