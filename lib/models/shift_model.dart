@@ -18,6 +18,10 @@ class ShiftModel {
   final double otherRevenue;
   final int invoiceCount;
 
+  // Tiền chi ra / nộp thêm vào két trong ca (mua đá, trả ship, nộp tiền lẻ...).
+  final double cashIn;
+  final double cashOut;
+
   final String? note;
   final String status; // 'open' | 'closed'
 
@@ -33,6 +37,8 @@ class ShiftModel {
     this.transferRevenue = 0,
     this.otherRevenue = 0,
     this.invoiceCount = 0,
+    this.cashIn = 0,
+    this.cashOut = 0,
     this.note,
     this.status = 'open',
   });
@@ -40,8 +46,9 @@ class ShiftModel {
   /// Tổng doanh thu ghi nhận trong ca (mọi hình thức thanh toán).
   double get totalRevenue => cashRevenue + transferRevenue + otherRevenue;
 
-  /// Tiền mặt dự kiến còn trong ngăn kéo cuối ca = tiền đầu ca + doanh thu tiền mặt.
-  double get expectedCash => openingCash + cashRevenue;
+  /// Tiền mặt dự kiến còn trong ngăn kéo cuối ca = tiền đầu ca + doanh thu
+  /// tiền mặt + tiền nộp thêm − tiền chi ra trong ca.
+  double get expectedCash => openingCash + cashRevenue + cashIn - cashOut;
 
   /// Chênh lệch = tiền đếm thực tế - tiền dự kiến. Dương = dư, âm = thiếu.
   double? get discrepancy =>
@@ -65,8 +72,43 @@ class ShiftModel {
       transferRevenue: (data['transferRevenue'] ?? 0).toDouble(),
       otherRevenue: (data['otherRevenue'] ?? 0).toDouble(),
       invoiceCount: (data['invoiceCount'] ?? 0) as int,
+      cashIn: (data['cashIn'] ?? 0).toDouble(),
+      cashOut: (data['cashOut'] ?? 0).toDouble(),
       note: data['note'],
       status: data['status'] ?? 'open',
+    );
+  }
+}
+
+/// 1 lần chi tiền ra khỏi két ('out') hoặc nộp thêm tiền vào két ('in') trong ca.
+class CashMovement {
+  final String id;
+  final String type; // 'in' | 'out'
+  final double amount;
+  final String reason;
+  final String staffName;
+  final DateTime createdAt;
+
+  const CashMovement({
+    required this.id,
+    required this.type,
+    required this.amount,
+    required this.reason,
+    required this.staffName,
+    required this.createdAt,
+  });
+
+  bool get isOut => type == 'out';
+
+  factory CashMovement.fromDoc(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return CashMovement(
+      id: doc.id,
+      type: data['type'] ?? 'out',
+      amount: (data['amount'] ?? 0).toDouble(),
+      reason: data['reason'] ?? '',
+      staffName: data['staffName'] ?? '',
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 }

@@ -862,11 +862,35 @@ class _OpenShiftStatusCardState extends State<_OpenShiftStatusCard> {
   // thanh toán phát sinh, không cần bấm refresh hay gọi lại thủ công.
   late Stream<Map<String, dynamic>> _revenueStream;
   Map<String, dynamic>? _lastRevenue; // giữ lại giá trị mới nhất để dùng khi mở dialog đóng ca
+  late Stream<List<CashMovement>> _movesStream;
+  List<CashMovement> _lastMoves = const [];
 
   @override
   void initState() {
     super.initState();
     _revenueStream = widget.shiftService.watchRevenueSince(widget.shift.openedAt);
+    _movesStream = widget.shiftService.watchCashMovements(widget.shift.id);
+  }
+
+  Future<void> _openCashMovement(String type) async {
+    final staff = context.read<AuthProvider>().currentUser;
+    if (staff == null) return;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _CashMovementDialog(
+        type: type,
+        shiftId: widget.shift.id,
+        staffId: staff.id,
+        staffName: staff.fullName,
+        shiftService: widget.shiftService,
+      ),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(type == 'out' ? 'Đã ghi khoản chi' : 'Đã ghi khoản nộp tiền'),
+        backgroundColor: AppColors.success,
+      ));
+    }
   }
 
   @override
@@ -875,6 +899,8 @@ class _OpenShiftStatusCardState extends State<_OpenShiftStatusCard> {
     if (oldWidget.shift.id != widget.shift.id) {
       _revenueStream = widget.shiftService.watchRevenueSince(widget.shift.openedAt);
       _lastRevenue = null;
+      _movesStream = widget.shiftService.watchCashMovements(widget.shift.id);
+      _lastMoves = const [];
     }
   }
 
@@ -883,7 +909,8 @@ class _OpenShiftStatusCardState extends State<_OpenShiftStatusCard> {
     // dialog đã đóng hẳn (chỉ 1 nơi duy nhất quyết định logout, tránh đua lệnh).
     final auth = context.read<AuthProvider>();
     final cash = (_lastRevenue?['cashRevenue'] ?? 0).toDouble();
-    final expected = widget.shift.openingCash + cash;
+    final moves = ShiftService.sumMovements(_lastMoves);
+    final expected = widget.shift.openingCash + cash + moves.cashIn - moves.cashOut;
 
     // Báo cho MainShell tạm ẩn cổng "cần mở ca" phản ứng theo stream — vì
     // Firestore sẽ báo hết ca mở gần như ngay khi closeShift() ghi xong, tức
@@ -918,6 +945,18 @@ class _OpenShiftStatusCardState extends State<_OpenShiftStatusCard> {
 
   @override
   Widget build(BuildContext context) {
+    return StreamBuilder<List<CashMovement>>(
+      stream: _movesStream,
+      builder: (context, movesSnap) {
+        if (movesSnap.data != null) _lastMoves = movesSnap.data!;
+        final movesList = _lastMoves;
+        final moves = ShiftService.sumMovements(movesList);
+        return _buildCard(movesList, moves.cashIn, moves.cashOut);
+      },
+    );
+  }
+
+  Widget _buildCard(List<CashMovement> movesList, double cashIn, double cashOut) {
     return StreamBuilder<Map<String, dynamic>>(
       stream: _revenueStream,
       builder: (context, snap) {
@@ -971,12 +1010,59 @@ class _OpenShiftStatusCardState extends State<_OpenShiftStatusCard> {
                       _statRow('Số hóa đơn', count.toDouble(), widget.fmt, isCount: true),
                       const Divider(height: 20, color: AppColors.divider),
                       _statRow('Tổng doanh thu ca', total, widget.fmt, bold: true),
+                      if (cashIn > 0) _statRow('Nộp thêm vào két', cashIn, widget.fmt),
+                      if (cashOut > 0) _statRow('Chi ra từ két', -cashOut, widget.fmt, color: AppColors.error),
                       _statRow('Tiền mặt dự kiến trong ngăn kéo',
-                          widget.shift.openingCash + cash, widget.fmt,
+                          widget.shift.openingCash + cash + cashIn - cashOut, widget.fmt,
                           bold: true, color: AppColors.primary),
                     ],
                   ),
+            if (movesList.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text('Thu / chi trong ca',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 4),
+              ...movesList.map((m) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(children: [
+                      Icon(m.isOut ? Icons.north_east_rounded : Icons.south_west_rounded,
+                          size: 14, color: m.isOut ? AppColors.error : AppColors.success),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${DateFormat('HH:mm').format(m.createdAt)} · ${m.reason} (${m.staffName})',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                      ),
+                      Text('${m.isOut ? '-' : '+'}${widget.fmt.format(m.amount)}đ',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: m.isOut ? AppColors.error : AppColors.success)),
+                    ]),
+                  )),
+            ],
             const SizedBox(height: 16),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _openCashMovement('out'),
+                  icon: const Icon(Icons.north_east_rounded, size: 18),
+                  label: const Text('Chi tiền'),
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _openCashMovement('in'),
+                  icon: const Icon(Icons.south_west_rounded, size: 18),
+                  label: const Text('Nộp tiền'),
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
@@ -1306,6 +1392,8 @@ class _ShiftHistoryTile extends StatelessWidget {
                 if (shift.otherRevenue > 0) _row('Khác', '${fmt.format(shift.otherRevenue)}đ'),
                 _row('Tổng doanh thu', '${fmt.format(shift.totalRevenue)}đ'),
                 _row('Số hóa đơn', '${shift.invoiceCount}'),
+                if (shift.cashIn > 0) _row('Nộp thêm vào két', '+${fmt.format(shift.cashIn)}đ'),
+                if (shift.cashOut > 0) _row('Chi ra từ két', '-${fmt.format(shift.cashOut)}đ'),
                 const Divider(height: 18, color: AppColors.divider),
                 _row('Tiền mặt dự kiến', '${fmt.format(shift.expectedCash)}đ'),
                 _row('Tiền mặt đếm được', '${fmt.format(shift.closingCashCounted ?? 0)}đ'),
@@ -1334,6 +1422,133 @@ class _ShiftHistoryTile extends StatelessWidget {
           Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
+    );
+  }
+}
+
+/// Ghi 1 khoản chi tiền ra khỏi két / nộp thêm tiền vào két trong ca.
+class _CashMovementDialog extends StatefulWidget {
+  final String type; // 'out' | 'in'
+  final String shiftId;
+  final String staffId;
+  final String staffName;
+  final ShiftService shiftService;
+
+  const _CashMovementDialog({
+    required this.type,
+    required this.shiftId,
+    required this.staffId,
+    required this.staffName,
+    required this.shiftService,
+  });
+
+  @override
+  State<_CashMovementDialog> createState() => _CashMovementDialogState();
+}
+
+class _CashMovementDialogState extends State<_CashMovementDialog> {
+  final _amountCtrl = TextEditingController();
+  final _reasonCtrl = TextEditingController();
+  bool _busy = false;
+
+  bool get _isOut => widget.type == 'out';
+  double get _amount =>
+      double.tryParse(_amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+
+  static const _outPresets = ['Mua đá', 'Mua sữa / nguyên liệu', 'Trả tiền ship', 'Tạm ứng lương'];
+  static const _inPresets = ['Nộp thêm tiền lẻ', 'Chủ quán đưa thêm'];
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _busy = true);
+    try {
+      await widget.shiftService.addCashMovement(
+        widget.shiftId,
+        type: widget.type,
+        amount: _amount,
+        reason: _reasonCtrl.text.trim(),
+        staffId: widget.staffId,
+        staffName: widget.staffName,
+      );
+      if (mounted) Navigator.pop(context, true);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lưu thất bại, vui lòng thử lại')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canSave = !_busy && _amount > 0 && _reasonCtrl.text.trim().isNotEmpty;
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(_isOut ? 'Chi tiền từ két' : 'Nộp tiền vào két'),
+      content: SizedBox(
+        width: 380,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _amountCtrl,
+                readOnly: true,
+                showCursor: true,
+                textAlign: TextAlign.right,
+                decoration: const InputDecoration(
+                  labelText: 'Số tiền (VNĐ)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.payments_outlined),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _MoneyKeypad(controller: _amountCtrl, onChanged: (_) => setState(() {})),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: (_isOut ? _outPresets : _inPresets)
+                    .map((r) => ActionChip(
+                          label: Text(r, style: const TextStyle(fontSize: 12)),
+                          onPressed: () => setState(() => _reasonCtrl.text = r),
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _reasonCtrl,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Lý do (bắt buộc)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context, false),
+          child: const Text('Hủy'),
+        ),
+        ElevatedButton(
+          onPressed: canSave ? _save : null,
+          child: _busy
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Lưu'),
+        ),
+      ],
     );
   }
 }

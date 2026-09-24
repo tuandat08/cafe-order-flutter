@@ -123,13 +123,64 @@ class ShiftService {
         .map((snap) => _aggregateRevenue(snap.docs));
   }
 
+  CollectionReference<Map<String, dynamic>> _moves(String shiftId) =>
+      _col.doc(shiftId).collection('cashMovements');
+
+  /// Ghi 1 lần chi tiền ra ([type] = 'out') hoặc nộp thêm tiền vào két
+  /// ([type] = 'in') trong ca — để tiền két dự kiến luôn khớp thực tế.
+  Future<void> addCashMovement(
+    String shiftId, {
+    required String type,
+    required double amount,
+    required String reason,
+    required String staffId,
+    required String staffName,
+  }) async {
+    await _moves(shiftId).add({
+      'type': type,
+      'amount': amount,
+      'reason': reason,
+      'staffId': staffId,
+      'staffName': staffName,
+      'createdAt': Timestamp.fromDate(DateTime.now()),
+    });
+  }
+
+  Stream<List<CashMovement>> watchCashMovements(String shiftId) {
+    return _moves(shiftId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map(CashMovement.fromDoc).toList());
+  }
+
+  /// Tổng tiền nộp vào / chi ra trong ca.
+  static ({double cashIn, double cashOut}) sumMovements(Iterable<CashMovement> list) {
+    double cashIn = 0, cashOut = 0;
+    for (final m in list) {
+      if (m.isOut) {
+        cashOut += m.amount;
+      } else {
+        cashIn += m.amount;
+      }
+    }
+    return (cashIn: cashIn, cashOut: cashOut);
+  }
+
+  Future<({double cashIn, double cashOut})> _movementTotals(String shiftId) async {
+    final snap = await _moves(shiftId).get();
+    return sumMovements(snap.docs.map(CashMovement.fromDoc));
+  }
+
   Future<void> closeShift(
     ShiftModel shift, {
     required double closingCashCounted,
     String? note,
   }) async {
     final revenue = await _revenueSince(shift.openedAt);
+    final moves = await _movementTotals(shift.id);
     await _col.doc(shift.id).update({
+      'cashIn': moves.cashIn,
+      'cashOut': moves.cashOut,
       'closedAt': FieldValue.serverTimestamp(),
       'closingCashCounted': closingCashCounted,
       'cashRevenue': revenue['cashRevenue'],
@@ -142,11 +193,12 @@ class ShiftService {
   }
 
   /// Tiền mặt dự kiến trong ngăn kéo NGAY LÚC NÀY nếu đóng ca (đầu ca + doanh
-  /// thu tiền mặt phát sinh tới hiện tại) — dùng để hiển thị trước khi mở dialog đóng ca.
+  /// thu tiền mặt + nộp thêm − chi ra) — dùng để hiển thị trước khi đóng ca.
   Future<double> computeExpectedCash(ShiftModel shift) async {
     final r = await _revenueSince(shift.openedAt);
     final cash = (r['cashRevenue'] ?? 0).toDouble();
-    return shift.openingCash + cash;
+    final moves = await _movementTotals(shift.id);
+    return shift.openingCash + cash + moves.cashIn - moves.cashOut;
   }
 
   /// Lịch sử các ca đã đóng TRONG NGÀY HÔM NAY (theo giờ thiết bị), mới nhất

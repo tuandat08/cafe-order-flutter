@@ -1648,77 +1648,28 @@ class _KDSTabState extends State<_KDSTab> {
       {bool isBilled = false, String? cardKey, bool isTakeaway = false}) async {
     final clearKey = cardKey ?? tableId;
     final reasonCtrl = TextEditingController();
-    String payMethod = 'Tiền mặt';
-
-    final confirmed = await showDialog<bool>(
-      context: ctx,
-      builder: (dCtx) => StatefulBuilder(
-        builder: (sbCtx, setSB) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Dọn bàn $tableId?'),
-          content: isBilled
-              // Đã xuất bill → chọn phương thức thanh toán (giống web showPaymentMethod)
-              ? Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Chọn phương thức thanh toán trước khi đóng bàn.',
-                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
-                  const SizedBox(height: 12),
-                  ...['Tiền mặt', 'Chuyển khoản'].map((m) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: GestureDetector(
-                      onTap: () => setSB(() => payMethod = m),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: payMethod == m ? const Color(0xFFEFF6FF) : Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: payMethod == m ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
-                            width: payMethod == m ? 2 : 1),
-                        ),
-                        child: Row(children: [
-                          Icon(m == 'Tiền mặt' ? Icons.payments_outlined
-                              : m == 'Chuyển khoản' ? Icons.account_balance_outlined : Icons.credit_card_rounded,
-                              size: 16, color: payMethod == m ? const Color(0xFF2563EB) : const Color(0xFF94A3B8)),
-                          const SizedBox(width: 8),
-                          Text(m, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                              color: payMethod == m ? const Color(0xFF2563EB) : const Color(0xFF1E293B))),
-                          const Spacer(),
-                          if (payMethod == m) const Icon(Icons.check_circle, size: 18, color: Color(0xFF2563EB)),
-                        ]),
-                      ),
-                    ),
-                  )),
-                ])
-              // Chưa xuất bill → bắt buộc nhập lý do
-              : Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Text('Bàn này chưa xuất bill. Vui lòng nhập lý do dọn bàn trước khi tiếp tục.',
-                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: reasonCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'VD: Khách tự thanh toán, dọn sai bàn...',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                    maxLines: 2,
-                  ),
-                ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Huỷ')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
-              onPressed: () {
-                if (!isBilled && reasonCtrl.text.trim().isEmpty) return;
-                Navigator.pop(dCtx, true);
-              },
-              child: const Text('Dọn bàn'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    final billOrderId = tableOrders.isNotEmpty ? tableOrders.first.id : null;
+    _PaymentResult? payment;
+    if (isBilled) {
+      // Đã xuất bill → bước THU TIỀN: bắt buộc chọn phương thức (không còn mặc
+      // định "Tiền mặt"), nhập tiền khách đưa / xác nhận đã nhận chuyển khoản.
+      final inv = billOrderId == null
+          ? null
+          : await _invoiceService.getLatestActiveForOrder(billOrderId);
+      if (!mounted || !ctx.mounted) return;
+      final billTotal = (inv?['totalAmount'] as num?)?.toDouble() ??
+          tableOrders.fold<double>(0.0, (s, o) => s + o.totalPrice);
+      payment = await showDialog<_PaymentResult>(
+        context: ctx,
+        barrierDismissible: false,
+        builder: (_) => _CollectPaymentDialog(tableId: tableId, total: billTotal),
+      );
+      if (payment == null || !mounted) return;
+    } else {
+      // Chưa xuất bill → bắt buộc nhập lý do dọn bàn
+      final confirmed = await _askClearReason(ctx, tableId, reasonCtrl);
+      if (confirmed != true || !mounted) return;
+    }
 
     final orderIds = tableOrders.where((o) => _kActive.contains(o.status)).map((o) => o.id).toList();
     final totalAmount = tableOrders.fold(0.0, (s, o) => s + o.totalPrice);
@@ -1740,7 +1691,24 @@ class _KDSTabState extends State<_KDSTab> {
     try {
       // Giống web: nếu đã bill → ghi PTTT vào hóa đơn TRƯỚC khi clear
       if (isBilled && firstOrderId != null) {
-        await _invoiceService.setPaymentMethod(firstOrderId, payMethod);
+        try {
+          await _invoiceService.recordPayment(
+            firstOrderId,
+            method: payment!.method,
+            total: payment.total,
+            cashReceived: payment.cashReceived,
+            transferConfirmed: payment.transferConfirmed,
+            staffId: currentUser?.id,
+            staffName: currentUser?.fullName,
+          );
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Không lưu được thông tin thu tiền, vui lòng thử lại'),
+              backgroundColor: Color(0xFFDC2626)));
+          }
+          return;
+        }
       }
       // completeAllOrdersAndFreeTable: đóng orders (closed) + clearedAt + clearLogs (nếu có lý do)
       await _orderService.completeAllOrdersAndFreeTable(
@@ -4702,74 +4670,28 @@ class _TableBoardTabState extends State<_TableBoardTab> {
       {bool isBilled = false, String? cardKey, bool isTakeaway = false}) async {
     final clearKey = cardKey ?? tableId;
     final reasonCtrl = TextEditingController();
-    String payMethod = 'Tiền mặt';
-
-    final confirmed = await showDialog<bool>(
-      context: ctx,
-      builder: (dCtx) => StatefulBuilder(
-        builder: (sbCtx, setSB) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Dọn bàn $tableId?'),
-          content: isBilled
-              ? Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Chọn phương thức thanh toán trước khi đóng bàn.',
-                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
-                  const SizedBox(height: 12),
-                  ...['Tiền mặt', 'Chuyển khoản'].map((m) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: GestureDetector(
-                      onTap: () => setSB(() => payMethod = m),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: payMethod == m ? const Color(0xFFEFF6FF) : Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: payMethod == m ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
-                            width: payMethod == m ? 2 : 1),
-                        ),
-                        child: Row(children: [
-                          Icon(m == 'Tiền mặt' ? Icons.payments_outlined : Icons.account_balance_outlined,
-                              size: 16, color: payMethod == m ? const Color(0xFF2563EB) : const Color(0xFF94A3B8)),
-                          const SizedBox(width: 8),
-                          Text(m, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                              color: payMethod == m ? const Color(0xFF2563EB) : const Color(0xFF1E293B))),
-                          const Spacer(),
-                          if (payMethod == m) const Icon(Icons.check_circle, size: 18, color: Color(0xFF2563EB)),
-                        ]),
-                      ),
-                    ),
-                  )),
-                ])
-              : Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Text('Bàn này chưa xuất bill. Vui lòng nhập lý do dọn bàn trước khi tiếp tục.',
-                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: reasonCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'VD: Khách tự thanh toán, dọn sai bàn...',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                    maxLines: 2,
-                  ),
-                ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Huỷ')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
-              onPressed: () {
-                if (!isBilled && reasonCtrl.text.trim().isEmpty) return;
-                Navigator.pop(dCtx, true);
-              },
-              child: const Text('Dọn bàn'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    final billOrderId = tableOrders.isNotEmpty ? tableOrders.first.id : null;
+    _PaymentResult? payment;
+    if (isBilled) {
+      // Đã xuất bill → bước THU TIỀN: bắt buộc chọn phương thức (không còn mặc
+      // định "Tiền mặt"), nhập tiền khách đưa / xác nhận đã nhận chuyển khoản.
+      final inv = billOrderId == null
+          ? null
+          : await _invoiceService.getLatestActiveForOrder(billOrderId);
+      if (!mounted || !ctx.mounted) return;
+      final billTotal = (inv?['totalAmount'] as num?)?.toDouble() ??
+          tableOrders.fold<double>(0.0, (s, o) => s + o.totalPrice);
+      payment = await showDialog<_PaymentResult>(
+        context: ctx,
+        barrierDismissible: false,
+        builder: (_) => _CollectPaymentDialog(tableId: tableId, total: billTotal),
+      );
+      if (payment == null || !mounted) return;
+    } else {
+      // Chưa xuất bill → bắt buộc nhập lý do dọn bàn
+      final confirmed = await _askClearReason(ctx, tableId, reasonCtrl);
+      if (confirmed != true || !mounted) return;
+    }
 
     final orderIds = tableOrders.where((o) => _kActive.contains(o.status)).map((o) => o.id).toList();
     final totalAmount = tableOrders.fold(0.0, (s, o) => s + o.totalPrice);
@@ -4790,7 +4712,24 @@ class _TableBoardTabState extends State<_TableBoardTab> {
     final firstOrderId = tableOrders.isNotEmpty ? tableOrders.first.id : null;
     try {
       if (isBilled && firstOrderId != null) {
-        await _invoiceService.setPaymentMethod(firstOrderId, payMethod);
+        try {
+          await _invoiceService.recordPayment(
+            firstOrderId,
+            method: payment!.method,
+            total: payment.total,
+            cashReceived: payment.cashReceived,
+            transferConfirmed: payment.transferConfirmed,
+            staffId: currentUser?.id,
+            staffName: currentUser?.fullName,
+          );
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Không lưu được thông tin thu tiền, vui lòng thử lại'),
+              backgroundColor: Color(0xFFDC2626)));
+          }
+          return;
+        }
       }
       await _orderService.completeAllOrdersAndFreeTable(
         tableId, orderIds,
@@ -5588,5 +5527,260 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         ]),
       ),
     ]);
+  }
+}
+
+/// Hỏi lý do dọn bàn khi CHƯA xuất bill (bắt buộc nhập).
+Future<bool?> _askClearReason(BuildContext ctx, String tableId, TextEditingController reasonCtrl) {
+  return showDialog<bool>(
+    context: ctx,
+    builder: (dCtx) => StatefulBuilder(
+      builder: (sbCtx, setSB) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Dọn bàn $tableId?'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('Bàn này chưa xuất bill. Vui lòng nhập lý do dọn bàn trước khi tiếp tục.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+          const SizedBox(height: 12),
+          TextField(
+            controller: reasonCtrl,
+            onChanged: (_) => setSB(() {}),
+            decoration: const InputDecoration(
+              hintText: 'VD: Khách tự thanh toán, dọn sai bàn...',
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            maxLines: 2,
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Huỷ')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
+            onPressed: reasonCtrl.text.trim().isEmpty ? null : () => Navigator.pop(dCtx, true),
+            child: const Text('Dọn bàn'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _PaymentResult {
+  final String method; // 'Tiền mặt' | 'Chuyển khoản'
+  final double total;
+  final double? cashReceived; // chỉ với tiền mặt
+  final bool transferConfirmed;
+  const _PaymentResult({
+    required this.method,
+    required this.total,
+    this.cashReceived,
+    this.transferConfirmed = false,
+  });
+}
+
+/// Bước THU TIỀN trước khi dọn bàn đã xuất bill:
+/// - Bắt buộc chọn phương thức (không có mặc định → tránh thu tiền mặt mà
+///   để nhầm/cố ý "Chuyển khoản" làm lệch két).
+/// - Tiền mặt: nhập tiền khách đưa (có nút chọn nhanh) → hiện tiền thối lại.
+/// - Chuyển khoản: hiện QR đúng số tiền + bắt buộc xác nhận đã thấy tiền vào TK.
+class _CollectPaymentDialog extends StatefulWidget {
+  final String tableId;
+  final double total;
+  const _CollectPaymentDialog({required this.tableId, required this.total});
+
+  @override
+  State<_CollectPaymentDialog> createState() => _CollectPaymentDialogState();
+}
+
+class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
+  String? _method;
+  final _cashCtrl = TextEditingController();
+  bool _transferConfirmed = false;
+
+  double get _total => widget.total;
+  double? get _cash {
+    final digits = _cashCtrl.text.replaceAll(RegExp(r'[^0-9]'), '');
+    return digits.isEmpty ? null : double.parse(digits);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    BankQrService.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _cashCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Mệnh giá khách hay đưa: đủ tiền + làm tròn lên 10k/50k/100k/200k/500k.
+  List<double> get _suggestions {
+    final set = <double>{_total};
+    for (final step in const [10000, 50000, 100000, 200000, 500000]) {
+      final v = (_total / step).ceil() * step.toDouble();
+      if (v > _total) set.add(v);
+    }
+    final list = set.toList()..sort();
+    return list.take(5).toList();
+  }
+
+  void _setCash(double v) {
+    _cashCtrl.text = _vndFmt.format(v);
+    setState(() {});
+  }
+
+  bool get _canConfirm {
+    if (_method == 'Tiền mặt') return (_cash ?? -1) >= _total;
+    if (_method == 'Chuyển khoản') return _transferConfirmed;
+    return false;
+  }
+
+  Widget _methodTile(String m, IconData icon) {
+    final sel = _method == m;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _method = m),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: sel ? const Color(0xFFEFF6FF) : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: sel ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0), width: sel ? 2 : 1),
+          ),
+          child: Column(children: [
+            Icon(icon, size: 22, color: sel ? const Color(0xFF2563EB) : const Color(0xFF94A3B8)),
+            const SizedBox(height: 4),
+            Text(m, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                color: sel ? const Color(0xFF2563EB) : const Color(0xFF1E293B))),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _cashSection() {
+    final cash = _cash;
+    final change = cash == null ? null : cash - _total;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 14),
+      TextField(
+        controller: _cashCtrl,
+        keyboardType: TextInputType.number,
+        textAlign: TextAlign.right,
+        onChanged: (v) {
+          final digits = v.replaceAll(RegExp(r'[^0-9]'), '');
+          final formatted = digits.isEmpty ? '' : _vndFmt.format(int.parse(digits));
+          _cashCtrl.value = TextEditingValue(
+            text: formatted, selection: TextSelection.collapsed(offset: formatted.length));
+          setState(() {});
+        },
+        decoration: const InputDecoration(
+          labelText: 'Khách đưa (VNĐ)',
+          border: OutlineInputBorder(),
+          isDense: true,
+          prefixIcon: Icon(Icons.payments_outlined),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Wrap(spacing: 6, runSpacing: 6, children: _suggestions.map((v) => ActionChip(
+        label: Text(v == _total ? 'Đủ tiền' : _vndFmt.format(v), style: const TextStyle(fontSize: 12)),
+        onPressed: () => _setCash(v),
+      )).toList()),
+      if (change != null) ...[
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: (change >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626)).withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            change >= 0 ? 'Thối lại khách: ${_vndFmt.format(change)}đ' : 'Còn thiếu: ${_vndFmt.format(-change)}đ',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800,
+                color: change >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626)),
+          ),
+        ),
+      ],
+    ]);
+  }
+
+  Widget _transferSection() {
+    final qr = BankQrService.instance;
+    return Column(children: [
+      const SizedBox(height: 14),
+      if (qr.shouldPrint)
+        Image.network(
+          qr.imageUrl(amount: _total, content: 'Ban ${widget.tableId}'),
+          width: 180, height: 180,
+          errorBuilder: (_, __, ___) => const Text('Không tải được mã QR',
+              style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+        )
+      else
+        const Text('Chưa cấu hình QR ngân hàng (Cài đặt → QR ngân hàng).',
+            style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+      const SizedBox(height: 6),
+      CheckboxListTile(
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _transferConfirmed,
+        onChanged: (v) => setState(() => _transferConfirmed = v ?? false),
+        title: Text('Đã kiểm tra: tài khoản quán đã nhận đủ ${_vndFmt.format(_total)}đ',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      ),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('Thu tiền bàn ${widget.tableId}'),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Text('Cần thu', style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+              const Spacer(),
+              Text('${_vndFmt.format(_total)}đ',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
+            ]),
+            const SizedBox(height: 14),
+            const Text('Phương thức thanh toán',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B))),
+            const SizedBox(height: 6),
+            Row(children: [
+              _methodTile('Tiền mặt', Icons.payments_outlined),
+              const SizedBox(width: 10),
+              _methodTile('Chuyển khoản', Icons.account_balance_outlined),
+            ]),
+            if (_method == 'Tiền mặt') _cashSection(),
+            if (_method == 'Chuyển khoản') _transferSection(),
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Huỷ')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white),
+          onPressed: _canConfirm
+              ? () => Navigator.pop(context, _PaymentResult(
+                    method: _method!,
+                    total: _total,
+                    cashReceived: _method == 'Tiền mặt' ? _cash : null,
+                    transferConfirmed: _method == 'Chuyển khoản' && _transferConfirmed,
+                  ))
+              : null,
+          child: const Text('Đã thu tiền · Dọn bàn'),
+        ),
+      ],
+    );
   }
 }

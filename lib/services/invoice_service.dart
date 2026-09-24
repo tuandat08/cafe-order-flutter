@@ -137,6 +137,34 @@ class InvoiceService {
     }
   }
 
+  /// Ghi nhận THU TIỀN cho hóa đơn active của đơn: phương thức, tiền khách
+  /// đưa / tiền thối (tiền mặt), xác nhận đã nhận chuyển khoản, ai thu, lúc nào.
+  Future<void> recordPayment(
+    String orderId, {
+    required String method,
+    required double total,
+    double? cashReceived,
+    bool transferConfirmed = false,
+    String? staffId,
+    String? staffName,
+  }) async {
+    final snap = await _db
+        .collection('invoices')
+        .where('orderId', isEqualTo: orderId)
+        .where('status', isEqualTo: 'active')
+        .get();
+    if (snap.docs.isEmpty) return;
+    await _db.collection('invoices').doc(snap.docs.first.id).update({
+      'paymentMethod': method,
+      'paidAt': Timestamp.fromDate(DateTime.now()),
+      if (staffId != null) 'paidById': staffId,
+      if (staffName != null) 'paidByName': staffName,
+      if (cashReceived != null) 'cashReceived': cashReceived,
+      if (cashReceived != null) 'changeGiven': cashReceived - total,
+      if (method == 'Chuyển khoản') 'transferConfirmed': transferConfirmed,
+    });
+  }
+
   /// Cập nhật phương thức thanh toán cho hóa đơn active của đơn.
   Future<void> setPaymentMethod(String orderId, String paymentMethod) async {
     try {
