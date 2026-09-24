@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -134,6 +135,16 @@ pw.Widget _pdfRow(String label, String value) => pw.Row(
     );
 
 final _vndFmt = NumberFormat('#,###', 'vi_VN');
+
+// Font in hóa đơn PDF — đóng gói sẵn trong app (assets/fonts, Roboto đủ dấu tiếng
+// Việt). Trước đây tải từ Google Fonts MỖI LẦN IN → mất mạng thì chữ có dấu bị lỗi.
+// Nạp 1 lần rồi dùng lại.
+Future<pw.ThemeData>? _receiptPdfThemeFuture;
+Future<pw.ThemeData> _receiptPdfTheme() => _receiptPdfThemeFuture ??= () async {
+      final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Regular.ttf'));
+      final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Bold.ttf'));
+      return pw.ThemeData.withFont(base: regular, bold: bold);
+    }();
 
 // ═══════════════════════════════════════════════════════
 //  ENTRY POINT
@@ -1586,9 +1597,7 @@ class _KDSTabState extends State<_KDSTab> {
     }
 
     // Chưa cấu hình máy in nhiệt (hoặc in nhiệt lỗi) → in PDF qua hộp thoại hệ thống
-    final font = await PdfGoogleFonts.robotoRegular();
-    final fontBold = await PdfGoogleFonts.robotoBold();
-    final doc = pw.Document(theme: pw.ThemeData.withFont(base: font, bold: fontBold));
+    final doc = pw.Document(theme: await _receiptPdfTheme());
     doc.addPage(pw.Page(
       pageFormat: PdfPageFormat.roll80,
       build: (c) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
@@ -4626,9 +4635,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
     }
 
     // Chưa cấu hình máy in nhiệt (hoặc in nhiệt lỗi) → in PDF qua hộp thoại hệ thống
-    final font = await PdfGoogleFonts.robotoRegular();
-    final fontBold = await PdfGoogleFonts.robotoBold();
-    final doc = pw.Document(theme: pw.ThemeData.withFont(base: font, bold: fontBold));
+    final doc = pw.Document(theme: await _receiptPdfTheme());
     doc.addPage(pw.Page(
       pageFormat: PdfPageFormat.roll80,
       build: (c) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [

@@ -60,3 +60,5 @@ flutter:
   assets:
     - assets/images/
     - assets/sounds/
+    # Font in hóa đơn PDF (Roboto, Apache 2.0) — đóng gói sẵn để in được khi mất mạng
+    - assets/fonts/
