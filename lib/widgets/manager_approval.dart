@@ -52,11 +52,11 @@ class _ManagerApprovalDialogState extends State<_ManagerApprovalDialog> {
     AccountModel? manager;
     try {
       manager = await AuthService().verifyManagerPassword(pw);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
           _checking = false;
-          _error = 'Không kiểm tra được, vui lòng thử lại';
+          _error = e is AuthApiException ? e.message : 'Không kiểm tra được, vui lòng thử lại';
         });
       }
       return;

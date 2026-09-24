@@ -48,6 +48,7 @@ dependencies:
   # Âm thanh + giọng đọc thông báo (giống useAudioNotification web)
   audioplayers: ^6.1.0
   flutter_tts: ^4.2.0
+  firebase_auth: ^5.7.0
 
 dev_dependencies:
   flutter_test:

@@ -33,11 +33,13 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       }
-    } catch (e, st) {
-      // ignore: avoid_print
-      print('[AuthProvider] login exception: $e');
-      // ignore: avoid_print
-      print(st);
+    } on AuthApiException catch (e) {
+      _error = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      debugPrint('[AuthProvider] login exception: $e');
       _error = 'Lỗi kết nối. Vui lòng thử lại.';
       _isLoading = false;
       notifyListeners();
@@ -46,6 +48,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void logout() {
+    // Thoát phiên Firebase Auth (không chờ) — Security Rules dựa vào phiên này.
+    _authService.signOut().catchError((_) {});
     _currentUser = null;
     _error = null;
     notifyListeners();
