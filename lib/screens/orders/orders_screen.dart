@@ -5688,9 +5688,10 @@ class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
         ),
       ),
       const SizedBox(height: 8),
-      Wrap(spacing: 6, runSpacing: 6, children: _suggestions.map((v) => ActionChip(
-        label: Text(v == _total ? 'Đủ tiền' : _vndFmt.format(v), style: const TextStyle(fontSize: 12)),
-        onPressed: () => _setCash(v),
+      Wrap(spacing: 8, runSpacing: 8, children: _suggestions.map((v) => _QuickPickButton(
+        label: v == _total ? 'Đủ tiền' : _vndFmt.format(v),
+        selected: _cash == v,
+        onTap: () => _setCash(v),
       )).toList()),
       if (change != null) ...[
         const SizedBox(height: 10),
@@ -5781,6 +5782,45 @@ class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
           child: const Text('Đã thu tiền · Dọn bàn'),
         ),
       ],
+    );
+  }
+}
+
+/// Nút chọn nhanh (mệnh giá khách đưa...) — màu rõ ràng, dễ bấm trên máy POS:
+/// nền trắng + viền + chữ đậm tối; đang chọn → nền xanh chữ trắng.
+class _QuickPickButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _QuickPickButton({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? const Color(0xFF2563EB) : Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 72, minHeight: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? const Color(0xFF2563EB) : const Color(0xFFCBD5E1),
+              width: 1.5,
+            ),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : const Color(0xFF1E293B),
+              )),
+        ),
+      ),
     );
   }
 }

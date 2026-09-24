@@ -1515,14 +1515,35 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
               _MoneyKeypad(controller: _amountCtrl, onChanged: (_) => setState(() {})),
               const SizedBox(height: 12),
               Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: (_isOut ? _outPresets : _inPresets)
-                    .map((r) => ActionChip(
-                          label: Text(r, style: const TextStyle(fontSize: 12)),
-                          onPressed: () => setState(() => _reasonCtrl.text = r),
-                        ))
-                    .toList(),
+                spacing: 8,
+                runSpacing: 8,
+                children: (_isOut ? _outPresets : _inPresets).map((r) {
+                  final sel = _reasonCtrl.text == r;
+                  return Material(
+                    color: sel ? AppColors.primary : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => setState(() => _reasonCtrl.text = r),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: sel ? AppColors.primary : const Color(0xFFCBD5E1),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(r,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: sel ? Colors.white : AppColors.textPrimary,
+                            )),
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 8),
               TextField(
