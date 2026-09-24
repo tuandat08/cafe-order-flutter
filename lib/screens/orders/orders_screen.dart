@@ -5618,19 +5618,11 @@ class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
     super.dispose();
   }
 
-  /// Mệnh giá khách hay đưa: đủ tiền + làm tròn lên 10k/50k/100k/200k/500k.
-  List<double> get _suggestions {
-    final set = <double>{_total};
-    for (final step in const [10000, 50000, 100000, 200000, 500000]) {
-      final v = (_total / step).ceil() * step.toDouble();
-      if (v > _total) set.add(v);
-    }
-    final list = set.toList()..sort();
-    return list.take(5).toList();
-  }
+  // Ô nhập tiền khách đưa: ngăn cách hàng nghìn bằng dấu phẩy (vd: 120,000).
+  static final _cashInputFmt = NumberFormat('#,###', 'en_US');
 
   void _setCash(double v) {
-    _cashCtrl.text = _vndFmt.format(v);
+    _cashCtrl.text = _cashInputFmt.format(v);
     setState(() {});
   }
 
@@ -5675,7 +5667,7 @@ class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
         textAlign: TextAlign.right,
         onChanged: (v) {
           final digits = v.replaceAll(RegExp(r'[^0-9]'), '');
-          final formatted = digits.isEmpty ? '' : _vndFmt.format(int.parse(digits));
+          final formatted = digits.isEmpty ? '' : _cashInputFmt.format(int.parse(digits));
           _cashCtrl.value = TextEditingValue(
             text: formatted, selection: TextSelection.collapsed(offset: formatted.length));
           setState(() {});
@@ -5688,11 +5680,11 @@ class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
         ),
       ),
       const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 8, children: _suggestions.map((v) => _QuickPickButton(
-        label: v == _total ? 'Đủ tiền' : _vndFmt.format(v),
-        selected: _cash == v,
-        onTap: () => _setCash(v),
-      )).toList()),
+      _QuickPickButton(
+        label: 'Đủ tiền',
+        selected: _cash == _total,
+        onTap: () => _setCash(_total),
+      ),
       if (change != null) ...[
         const SizedBox(height: 10),
         Container(
