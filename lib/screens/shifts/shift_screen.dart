@@ -325,6 +325,9 @@ class OpenShiftGateScreen extends StatefulWidget {
 class _OpenShiftGateScreenState extends State<OpenShiftGateScreen> {
   final _ctrl = TextEditingController();
   bool _busy = false;
+  // Ca chưa đóng mà server phát hiện lúc bấm "Mở ca" (stream của MainShell có
+  // thể chưa kịp đồng bộ) → hiện ngay màn bắt buộc đóng ca đó tại chỗ.
+  ShiftModel? _blockingShift;
 
   @override
   void dispose() {
@@ -342,17 +345,47 @@ class _OpenShiftGateScreenState extends State<OpenShiftGateScreen> {
     );
     if (!confirmed || !mounted) return;
     setState(() => _busy = true);
-    await widget.shiftService.openShift(
-      staffId: widget.staffId,
-      staffName: widget.staffName,
-      openingCash: value,
-    );
+    try {
+      await widget.shiftService.openShift(
+        staffId: widget.staffId,
+        staffName: widget.staffName,
+        openingCash: value,
+      );
+    } on ShiftStillOpenException catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _blockingShift = e.shift;
+        });
+      }
+      return;
+    } catch (_) {
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Không kiểm tra được ca làm việc, vui lòng kiểm tra mạng và thử lại')),
+        );
+      }
+      return;
+    }
     // Không cần tự tắt _busy / điều hướng ở đây — màn hình này sẽ tự động bị
-    // thay thế bởi MainShell ngay khi stream watchOpenShift() nhận ca vừa mở.
+    // thay thế bởi MainShell ngay khi stream nhận ca vừa mở.
   }
 
   @override
   Widget build(BuildContext context) {
+    final blocking = _blockingShift;
+    if (blocking != null) {
+      return StaleShiftGateScreen(
+        key: ValueKey(blocking.id),
+        shift: blocking,
+        shiftService: widget.shiftService,
+        isOwnShift: blocking.staffId == widget.staffId,
+        onClosed: () {
+          if (mounted) setState(() => _blockingShift = null);
+        },
+      );
+    }
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -445,12 +478,19 @@ class _OpenShiftGateScreenState extends State<OpenShiftGateScreen> {
 class StaleShiftGateScreen extends StatefulWidget {
   final ShiftModel shift;
   final ShiftService shiftService;
+  /// false = ca bỏ dở của NGƯỜI KHÁC (tài khoản đăng nhập trước đó chưa đóng ca).
+  final bool isOwnShift;
 
   const StaleShiftGateScreen({
     super.key,
     required this.shift,
     required this.shiftService,
+    this.isOwnShift = true,
+    this.onClosed,
   });
+
+  /// Gọi sau khi đóng ca thành công (ngoài việc stream tự cập nhật).
+  final VoidCallback? onClosed;
 
   @override
   State<StaleShiftGateScreen> createState() => _StaleShiftGateScreenState();
@@ -522,6 +562,7 @@ class _StaleShiftGateScreenState extends State<StaleShiftGateScreen> {
         closingCashCounted: _counted,
         note: _noteCtrl.text.trim().isEmpty
             ? 'Tu dong phat hien: ca bi bo do tu phien truoc (thoat app khong dang xuat/dong ca), da bat buoc kiem ca thu cong.'
+                '${widget.isOwnShift ? '' : ' Nguoi dong ho: ${context.read<AuthProvider>().currentUser?.fullName ?? ''}.'}'
             : _noteCtrl.text.trim(),
       );
     } catch (e) {
@@ -535,6 +576,7 @@ class _StaleShiftGateScreenState extends State<StaleShiftGateScreen> {
     }
     if (mounted) setState(() => _success = true);
     await Future.delayed(const Duration(milliseconds: 900));
+    widget.onClosed?.call();
     // Khong tu dieu huong - man hinh nay se tu dong bi MainShell thay the
     // (chuyen sang man "can mo ca moi") ngay khi stream watchOpenShift()
     // nhan biet ca cu vua duoc dong.
@@ -569,7 +611,7 @@ class _StaleShiftGateScreenState extends State<StaleShiftGateScreen> {
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       Text(
-                        'Ca của bạn (${widget.shift.staffName}) mở lúc '
+                        '${widget.isOwnShift ? 'Ca của bạn (${widget.shift.staffName})' : 'Ca của ${widget.shift.staffName} (tài khoản đăng nhập trước)'} mở lúc '
                         '${_dateFmt.format(widget.shift.openedAt)} vẫn đang ở trạng thái '
                         'mở — có thể do ứng dụng đã bị thoát trước khi đóng ca. '
                         'Vui lòng đếm và nhập tiền mặt thực tế trong ngăn kéo để đóng ca này trước khi tiếp tục sử dụng ứng dụng.',
@@ -716,11 +758,21 @@ class _OpenShiftCardState extends State<_OpenShiftCard> {
     );
     if (!confirmed || !mounted) return;
     setState(() => _busy = true);
-    await widget.shiftService.openShift(
-      staffId: widget.staffId,
-      staffName: widget.staffName,
-      openingCash: value,
-    );
+    try {
+      await widget.shiftService.openShift(
+        staffId: widget.staffId,
+        staffName: widget.staffName,
+        openingCash: value,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e is ShiftStillOpenException
+              ? e.toString()
+              : 'Không kiểm tra được ca làm việc, vui lòng kiểm tra mạng và thử lại'),
+        ));
+      }
+    }
     if (mounted) setState(() => _busy = false);
   }
 

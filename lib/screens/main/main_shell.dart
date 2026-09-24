@@ -156,7 +156,7 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     // Không có stream (không xác định được currentUser ở initState) — trường
     // hợp an toàn dự phòng, không nên xảy ra trên thực tế.
-    if (_openShiftStream == null) return _buildShell();
+    if (_allOpenShiftsStream == null) return _buildShell();
 
     // Đang trong lúc đóng ca để đăng xuất → CHỦ ĐỘNG không xét stream ca mở
     // nữa, luôn hiện màn hình chờ đơn giản. Đây là điểm sửa gốc rễ: nếu vẫn
@@ -170,36 +170,73 @@ class _MainShellState extends State<MainShell> {
     }
 
     final user = context.read<AuthProvider>().currentUser!;
-    return StreamBuilder<ShiftModel?>(
-      stream: _openShiftStream,
+    return StreamBuilder<List<ShiftModel>>(
+      stream: _allOpenShiftsStream,
       builder: (context, snap) {
+        // Không đọc được danh sách ca (mất mạng, lỗi quyền...) → KHÔNG được coi
+        // như "không có ca nào mở" mà cho qua; chặn lại và cho thử lại.
+        if (snap.hasError) {
+          return _ShiftLoadErrorScreen(
+            onRetry: () => setState(
+              () => _allOpenShiftsStream = _shiftService.watchAllOpenShifts(),
+            ),
+          );
+        }
         if (snap.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
-        final openShift = snap.data;
+        // Ca cũ nhất trước — nếu có nhiều ca bỏ dở thì lần lượt đóng từng ca.
+        final openShifts = [...(snap.data ?? const <ShiftModel>[])]
+          ..sort((a, b) => a.openedAt.compareTo(b.openedAt));
 
-        // Bước 1 — ÁP DỤNG CHO MỌI TÀI KHOẢN đã từng mở ca (kể cả bếp, nếu
-        // có): nếu ca đang mở là từ một ngày trước đó, gần như chắc chắn do app bị
-        // thoát (vượt-tắt/force-kill) mà không đăng xuất hay đóng ca. Bắt buộc kiểm
-        // ca thủ công (đếm tiền thật) trước khi cho vào app — không tự động đóng
-        // ngầm, không cho bỏ qua, không phân biệt vai trò tài khoản.
-        if (openShift != null) {
-          final now = DateTime.now();
-          final opened = openShift.openedAt;
-          final isStale = opened.year != now.year ||
-              opened.month != now.month ||
-              opened.day != now.day;
-          if (isStale) {
-            return StaleShiftGateScreen(
-              shift: openShift,
-              shiftService: _shiftService,
-            );
+        final now = DateTime.now();
+        bool isToday(DateTime d) =>
+            d.year == now.year && d.month == now.month && d.day == now.day;
+
+        // Ca đang mở của CHÍNH tài khoản đăng nhập và còn trong ngày → được
+        // tiếp tục dùng (vd: chỉ tắt/mở lại app giữa ca).
+        ShiftModel? ownActiveShift;
+        for (final s in openShifts) {
+          if (s.staffId == user.id && isToday(s.openedAt)) {
+            ownActiveShift = s;
+            break;
           }
+        }
+
+        // Bước 1 — ÁP DỤNG CHO MỌI TÀI KHOẢN (admin, staff, bếp): phát hiện ca
+        // bị bỏ dở cần đóng trước khi vào app:
+        //  • ca của chính mình nhưng mở từ ngày trước (quên đóng / vuốt-tắt app);
+        //  • ca của NGƯỜI KHÁC vẫn đang mở (vd: staff A mở ca rồi vuốt-tắt app,
+        //    sau đó admin hay staff B đăng nhập) — vì ngăn kéo tiền dùng chung,
+        //    phải đếm tiền và đóng ca của A trước. Chỉ xét khi mình CHƯA có ca
+        //    đang hoạt động trong ngày, để 1 người khác mở ca trên máy khác
+        //    không đá văng người đang làm việc giữa ca.
+        ShiftModel? abandoned;
+        for (final s in openShifts) {
+          final isOwn = s.staffId == user.id;
+          if (isOwn && !isToday(s.openedAt)) {
+            abandoned = s;
+            break;
+          }
+          if (!isOwn && ownActiveShift == null) {
+            abandoned = s;
+            break;
+          }
+        }
+        if (abandoned != null) {
+          return StaleShiftGateScreen(
+            // key theo id ca → nếu còn ca bỏ dở khác, màn chặn reset lại
+            // (không giữ số tiền đã nhập của ca trước).
+            key: ValueKey(abandoned.id),
+            shift: abandoned,
+            shiftService: _shiftService,
+            isOwnShift: abandoned.staffId == user.id,
+          );
         }
 
         // Bước 2 — chỉ áp dụng cho tài khoản bắt buộc phải mở ca (không phải bếp):
         // chưa mở ca — chặn toàn bộ app, bắt buộc mở ca trước.
-        if (_requiresShift && openShift == null) {
+        if (_requiresShift && ownActiveShift == null) {
           return OpenShiftGateScreen(
             staffId: user.id,
             staffName: user.fullName,
@@ -445,6 +482,39 @@ class _Sidebar extends StatelessWidget {
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ShiftLoadErrorScreen extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _ShiftLoadErrorScreen({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 40, color: AppColors.error),
+              const SizedBox(height: 12),
+              const Text(
+                'Không kiểm tra được ca làm việc. Vui lòng kiểm tra kết nối mạng và thử lại.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(onPressed: onRetry, child: const Text('Thử lại')),
+              TextButton(
+                onPressed: () => context.read<AuthProvider>().logout(),
+                child: const Text('Đăng xuất'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
