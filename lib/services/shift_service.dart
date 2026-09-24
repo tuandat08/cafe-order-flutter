@@ -38,11 +38,28 @@ class ShiftService {
     return ShiftModel.fromDoc(snap.docs.first);
   }
 
+  /// Các ca đang mở, đọc thẳng từ SERVER (không dùng cache offline) — dùng làm
+  /// chốt chặn cuối cùng trước khi mở ca mới, vì stream có thể phát kết quả
+  /// cache rỗng/cũ ở lần đầu trên máy chưa đồng bộ.
+  Future<List<ShiftModel>> getAllOpenShiftsFromServer() async {
+    final snap = await _col
+        .where('status', isEqualTo: 'open')
+        .get(const GetOptions(source: Source.server));
+    final list = snap.docs.map(ShiftModel.fromDoc).toList()
+      ..sort((a, b) => a.openedAt.compareTo(b.openedAt));
+    return list;
+  }
+
+  /// Mở ca mới. Ném [ShiftStillOpenException] nếu còn BẤT KỲ ca nào đang mở
+  /// (của chính mình hoặc của tài khoản đăng nhập trước chưa đóng ca) — ngăn
+  /// kéo tiền dùng chung nên ca cũ phải được kiểm & đóng trước.
   Future<String> openShift({
     required String staffId,
     required String staffName,
     required double openingCash,
   }) async {
+    final stillOpen = await getAllOpenShiftsFromServer();
+    if (stillOpen.isNotEmpty) throw ShiftStillOpenException(stillOpen.first);
     final ref = await _col.add({
       'staffId': staffId,
       'staffName': staffName,
@@ -145,4 +162,14 @@ class ShiftService {
         .snapshots()
         .map((snap) => snap.docs.map(ShiftModel.fromDoc).toList());
   }
+}
+
+/// Còn ca đang mở chưa được đóng — không cho mở ca mới.
+class ShiftStillOpenException implements Exception {
+  final ShiftModel shift;
+  const ShiftStillOpenException(this.shift);
+
+  @override
+  String toString() =>
+      'Ca của ${shift.staffName} vẫn chưa được đóng — cần đóng ca đó trước khi mở ca mới.';
 }

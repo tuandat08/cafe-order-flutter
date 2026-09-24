@@ -173,6 +173,15 @@ class _MainShellState extends State<MainShell> {
     return StreamBuilder<List<ShiftModel>>(
       stream: _allOpenShiftsStream,
       builder: (context, snap) {
+        // Không đọc được danh sách ca (mất mạng, lỗi quyền...) → KHÔNG được coi
+        // như "không có ca nào mở" mà cho qua; chặn lại và cho thử lại.
+        if (snap.hasError) {
+          return _ShiftLoadErrorScreen(
+            onRetry: () => setState(
+              () => _allOpenShiftsStream = _shiftService.watchAllOpenShifts(),
+            ),
+          );
+        }
         if (snap.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
@@ -473,6 +482,39 @@ class _Sidebar extends StatelessWidget {
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ShiftLoadErrorScreen extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _ShiftLoadErrorScreen({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 40, color: AppColors.error),
+              const SizedBox(height: 12),
+              const Text(
+                'Không kiểm tra được ca làm việc. Vui lòng kiểm tra kết nối mạng và thử lại.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(onPressed: onRetry, child: const Text('Thử lại')),
+              TextButton(
+                onPressed: () => context.read<AuthProvider>().logout(),
+                child: const Text('Đăng xuất'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
