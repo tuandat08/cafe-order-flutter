@@ -23,7 +23,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 30,
-      "community_name": "Flutter",
+      "community_name": "ios/RunnerTests/RunnerTests.swift",
       "file_type": "code",
       "norm_label": "scenedelegate",
       "source_file": "ios/Runner/SceneDelegate.swift",
@@ -41,6 +41,19 @@
       "norm_label": "generatedpluginregistrant",
       "source_file": "android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java",
       "source_location": "L14"
+    },
+    {
+      "id": "macos_runnertests_runnertests_runnertests",
+      "label": "RunnerTests",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 32,
+      "community_name": "FlutterMacOS",
+      "file_type": "code",
+      "norm_label": "runnertests",
+      "source_file": "macos/RunnerTests/RunnerTests.swift",
+      "source_location": "L5"
     },
     {
       "id": "macos_runner_appdelegate_appdelegate",
@@ -75,23 +88,10 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 35,
-      "community_name": "ios/RunnerTests/RunnerTests.swift",
+      "community_name": "RunnerTests",
       "file_type": "code",
       "norm_label": "runnertests",
       "source_file": "ios/RunnerTests/RunnerTests.swift",
-      "source_location": "L5"
-    },
-    {
-      "id": "macos_runnertests_runnertests_runnertests",
-      "label": "RunnerTests",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 35,
-      "community_name": "ios/RunnerTests/RunnerTests.swift",
-      "file_type": "code",
-      "norm_label": "runnertests",
-      "source_file": "macos/RunnerTests/RunnerTests.swift",
       "source_location": "L5"
     },
     {
@@ -145,6 +145,18 @@
       "norm_label": ".registerwith()",
       "source_file": "android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java",
       "source_location": "L17"
+    },
+    {
+      "id": "macos_runnertests_runnertests_runnertests_testexample",
+      "label": ".testExample()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 32,
+      "community_name": "FlutterMacOS",
+      "file_type": "code",
+      "norm_label": ".testexample()",
+      "source_file": "macos/RunnerTests/RunnerTests.swift",
+      "source_location": "L7"
     },
     {
       "id": "macos_runner_appdelegate_appdelegate_applicationshouldterminateafterlastwindowclosed",
@@ -276,22 +288,10 @@
       "_callable": true,
       "_origin": "ast",
       "community": 35,
-      "community_name": "ios/RunnerTests/RunnerTests.swift",
+      "community_name": "RunnerTests",
       "file_type": "code",
       "norm_label": ".testexample()",
       "source_file": "ios/RunnerTests/RunnerTests.swift",
-      "source_location": "L7"
-    },
-    {
-      "id": "macos_runnertests_runnertests_runnertests_testexample",
-      "label": ".testExample()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 35,
-      "community_name": "ios/RunnerTests/RunnerTests.swift",
-      "file_type": "code",
-      "norm_label": ".testexample()",
-      "source_file": "macos/RunnerTests/RunnerTests.swift",
       "source_location": "L7"
     },
     {
@@ -4442,17 +4442,6 @@
       "source_location": null
     },
     {
-      "id": "icondata",
-      "label": "IconData",
-      "_origin": "ast",
-      "community": 10,
-      "community_name": "reports_screen.dart",
-      "file_type": "code",
-      "norm_label": "icondata",
-      "source_file": null,
-      "source_location": null
-    },
-    {
       "id": "lib_screens_reports_reports_screen",
       "label": "reports_screen.dart",
       "_origin": "ast",
@@ -4693,6 +4682,17 @@
       "norm_label": "value",
       "source_file": "lib/screens/reports/reports_screen.dart",
       "source_location": "L233"
+    },
+    {
+      "id": "list",
+      "label": "List",
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "reports_screen.dart",
+      "file_type": "code",
+      "norm_label": "list",
+      "source_file": null,
+      "source_location": null
     },
     {
       "id": "numberformat",
@@ -5102,17 +5102,6 @@
       "source_location": "L1171"
     },
     {
-      "id": "lib_screens_dashboard_dashboard_screen_badge",
-      "label": "_Badge",
-      "_origin": "ast",
-      "community": 12,
-      "community_name": "StatelessWidget",
-      "file_type": "code",
-      "norm_label": "_badge",
-      "source_file": "lib/screens/dashboard/dashboard_screen.dart",
-      "source_location": "L321"
-    },
-    {
       "id": "lib_screens_dashboard_dashboard_screen_dashboardbody",
       "label": "_DashboardBody",
       "_origin": "ast",
@@ -5122,6 +5111,17 @@
       "norm_label": "_dashboardbody",
       "source_file": "lib/screens/dashboard/dashboard_screen.dart",
       "source_location": "L19"
+    },
+    {
+      "id": "lib_screens_dashboard_dashboard_screen_dayheader",
+      "label": "_DayHeader",
+      "_origin": "ast",
+      "community": 12,
+      "community_name": "StatelessWidget",
+      "file_type": "code",
+      "norm_label": "_dayheader",
+      "source_file": "lib/screens/dashboard/dashboard_screen.dart",
+      "source_location": "L148"
     },
     {
       "id": "lib_screens_dashboard_dashboard_screen_ordercard",
@@ -5311,6 +5311,17 @@
       "source_location": null
     },
     {
+      "id": "lib_screens_dashboard_dashboard_screen_badge",
+      "label": "_Badge",
+      "_origin": "ast",
+      "community": 13,
+      "community_name": "dashboard_screen.dart",
+      "file_type": "code",
+      "norm_label": "_badge",
+      "source_file": "lib/screens/dashboard/dashboard_screen.dart",
+      "source_location": "L321"
+    },
+    {
       "id": "lib_screens_dashboard_dashboard_screen_bg",
       "label": "bg",
       "_origin": "ast",
@@ -5386,17 +5397,6 @@
       "norm_label": "data",
       "source_file": "lib/screens/dashboard/dashboard_screen.dart",
       "source_location": "L274"
-    },
-    {
-      "id": "lib_screens_dashboard_dashboard_screen_dayheader",
-      "label": "_DayHeader",
-      "_origin": "ast",
-      "community": 13,
-      "community_name": "dashboard_screen.dart",
-      "file_type": "code",
-      "norm_label": "_dayheader",
-      "source_file": "lib/screens/dashboard/dashboard_screen.dart",
-      "source_location": "L148"
     },
     {
       "id": "lib_screens_dashboard_dashboard_screen_icon",
@@ -6203,12 +6203,12 @@
     },
     {
       "id": "providers_auth_provider_dart",
-      "label": "../../providers/auth_provider.dart",
+      "label": "providers/auth_provider.dart",
       "_origin": "ast",
       "community": 16,
       "community_name": "AuthProvider",
       "file_type": "code",
-      "norm_label": "../../providers/auth_provider.dart",
+      "norm_label": "providers/auth_provider.dart",
       "source_file": null,
       "source_location": null
     },
@@ -6412,12 +6412,12 @@
     },
     {
       "id": "core_theme_app_theme_dart",
-      "label": "../../core/theme/app_theme.dart",
+      "label": "core/theme/app_theme.dart",
       "_origin": "ast",
       "community": 18,
       "community_name": "package:flutter/material.dart",
       "file_type": "code",
-      "norm_label": "../../core/theme/app_theme.dart",
+      "norm_label": "core/theme/app_theme.dart",
       "source_file": null,
       "source_location": null
     },
@@ -6544,12 +6544,12 @@
     },
     {
       "id": "services_auth_service_dart",
-      "label": "../../services/auth_service.dart",
+      "label": "../services/auth_service.dart",
       "_origin": "ast",
       "community": 18,
       "community_name": "package:flutter/material.dart",
       "file_type": "code",
-      "norm_label": "../../services/auth_service.dart",
+      "norm_label": "../services/auth_service.dart",
       "source_file": null,
       "source_location": null
     },
@@ -6585,303 +6585,6 @@
       "norm_label": "main",
       "source_file": "test/widget_test.dart",
       "source_location": "L13"
-    },
-    {
-      "id": "dart_convert",
-      "label": "dart:convert",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "dart:convert",
-      "source_file": null,
-      "source_location": null
-    },
-    {
-      "id": "lib_services_auth_service",
-      "label": "auth_service.dart",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "auth_service.dart",
-      "source_file": "lib/services/auth_service.dart",
-      "source_location": null
-    },
-    {
-      "id": "lib_services_auth_service_authservice",
-      "label": "AuthService",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "authservice",
-      "source_file": "lib/services/auth_service.dart",
-      "source_location": "L8"
-    },
-    {
-      "id": "lib_services_auth_service_createaccount",
-      "label": "createAccount",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "createaccount",
-      "source_file": "lib/services/auth_service.dart",
-      "source_location": "L31"
-    },
-    {
-      "id": "lib_services_auth_service_db",
-      "label": "_db",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "_db",
-      "source_file": "lib/services/auth_service.dart",
-      "source_location": "L9"
-    },
-    {
-      "id": "lib_services_auth_service_hashpassword",
-      "label": "hashPassword",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "hashpassword",
-      "source_file": "lib/services/auth_service.dart",
-      "source_location": "L11"
-    },
-    {
-      "id": "lib_services_auth_service_login",
-      "label": "login",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "login",
-      "source_file": "lib/services/auth_service.dart",
-      "source_location": "L16"
-    },
-    {
-      "id": "lib_services_auth_service_salt",
-      "label": "_salt",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "_salt",
-      "source_file": "lib/services/auth_service.dart",
-      "source_location": "L6"
-    },
-    {
-      "id": "lib_services_auth_service_streamaccounts",
-      "label": "streamAccounts",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "streamaccounts",
-      "source_file": "lib/services/auth_service.dart",
-      "source_location": "L64"
-    },
-    {
-      "id": "lib_services_auth_service_updateaccount",
-      "label": "updateAccount",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "updateaccount",
-      "source_file": "lib/services/auth_service.dart",
-      "source_location": "L49"
-    },
-    {
-      "id": "lib_services_auth_service_updatepassword",
-      "label": "updatePassword",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "updatepassword",
-      "source_file": "lib/services/auth_service.dart",
-      "source_location": "L56"
-    },
-    {
-      "id": "lib_services_discount_service",
-      "label": "discount_service.dart",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "discount_service.dart",
-      "source_file": "lib/services/discount_service.dart",
-      "source_location": null
-    },
-    {
-      "id": "lib_services_discount_service_db",
-      "label": "_db",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "_db",
-      "source_file": "lib/services/discount_service.dart",
-      "source_location": "L5"
-    },
-    {
-      "id": "lib_services_discount_service_delete",
-      "label": "delete",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "delete",
-      "source_file": "lib/services/discount_service.dart",
-      "source_location": "L29"
-    },
-    {
-      "id": "lib_services_discount_service_discountservice",
-      "label": "DiscountService",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "discountservice",
-      "source_file": "lib/services/discount_service.dart",
-      "source_location": "L4"
-    },
-    {
-      "id": "lib_services_discount_service_incrementusage",
-      "label": "incrementUsage",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "incrementusage",
-      "source_file": "lib/services/discount_service.dart",
-      "source_location": "L38"
-    },
-    {
-      "id": "lib_services_discount_service_save",
-      "label": "save",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "save",
-      "source_file": "lib/services/discount_service.dart",
-      "source_location": "L17"
-    },
-    {
-      "id": "lib_services_discount_service_streamdiscounts",
-      "label": "streamDiscounts",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "streamdiscounts",
-      "source_file": "lib/services/discount_service.dart",
-      "source_location": "L7"
-    },
-    {
-      "id": "lib_services_discount_service_toggle",
-      "label": "toggle",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "toggle",
-      "source_file": "lib/services/discount_service.dart",
-      "source_location": "L33"
-    },
-    {
-      "id": "lib_services_invoice_service",
-      "label": "invoice_service.dart",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "invoice_service.dart",
-      "source_file": "lib/services/invoice_service.dart",
-      "source_location": null
-    },
-    {
-      "id": "lib_services_invoice_service_db",
-      "label": "_db",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "_db",
-      "source_file": "lib/services/invoice_service.dart",
-      "source_location": "L5"
-    },
-    {
-      "id": "lib_services_invoice_service_getlatestactivefororder",
-      "label": "getLatestActiveForOrder",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "getlatestactivefororder",
-      "source_file": "lib/services/invoice_service.dart",
-      "source_location": "L50"
-    },
-    {
-      "id": "lib_services_invoice_service_getlatestactivefortable",
-      "label": "getLatestActiveForTable",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "getlatestactivefortable",
-      "source_file": "lib/services/invoice_service.dart",
-      "source_location": "L8"
-    },
-    {
-      "id": "lib_services_invoice_service_invoiceservice",
-      "label": "InvoiceService",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "invoiceservice",
-      "source_file": "lib/services/invoice_service.dart",
-      "source_location": "L4"
-    },
-    {
-      "id": "lib_services_invoice_service_saveinvoice",
-      "label": "saveInvoice",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "saveinvoice",
-      "source_file": "lib/services/invoice_service.dart",
-      "source_location": "L85"
-    },
-    {
-      "id": "lib_services_invoice_service_setpaymentmethod",
-      "label": "setPaymentMethod",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "setpaymentmethod",
-      "source_file": "lib/services/invoice_service.dart",
-      "source_location": "L128"
-    },
-    {
-      "id": "lib_services_invoice_service_supersede",
-      "label": "supersede",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "supersede",
-      "source_file": "lib/services/invoice_service.dart",
-      "source_location": "L75"
     },
     {
       "id": "lib_services_table_service",
@@ -7038,28 +6741,6 @@
       "source_location": "L30"
     },
     {
-      "id": "models_account_model_dart",
-      "label": "../models/account_model.dart",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "../models/account_model.dart",
-      "source_file": null,
-      "source_location": null
-    },
-    {
-      "id": "models_discount_model_dart",
-      "label": "../models/discount_model.dart",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "../models/discount_model.dart",
-      "source_file": null,
-      "source_location": null
-    },
-    {
       "id": "models_table_model_dart",
       "label": "../models/table_model.dart",
       "_origin": "ast",
@@ -7067,28 +6748,6 @@
       "community_name": "table_service.dart",
       "file_type": "code",
       "norm_label": "../models/table_model.dart",
-      "source_file": null,
-      "source_location": null
-    },
-    {
-      "id": "package_cloud_firestore_cloud_firestore_dart",
-      "label": "package:cloud_firestore/cloud_firestore.dart",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "package:cloud_firestore/cloud_firestore.dart",
-      "source_file": null,
-      "source_location": null
-    },
-    {
-      "id": "package_crypto_crypto_dart",
-      "label": "package:crypto/crypto.dart",
-      "_origin": "ast",
-      "community": 19,
-      "community_name": "table_service.dart",
-      "file_type": "code",
-      "norm_label": "package:crypto/crypto.dart",
       "source_file": null,
       "source_location": null
     },
@@ -7753,17 +7412,6 @@
       "source_location": "L67"
     },
     {
-      "id": "string",
-      "label": "String?",
-      "_origin": "ast",
-      "community": 20,
-      "community_name": "menu_item_model.dart",
-      "file_type": "code",
-      "norm_label": "string?",
-      "source_file": null,
-      "source_location": null
-    },
-    {
       "id": "accountmodel_get",
       "label": "AccountModel? get",
       "_origin": "ast",
@@ -7894,6 +7542,17 @@
       "norm_label": "logout",
       "source_file": "lib/providers/auth_provider.dart",
       "source_location": "L44"
+    },
+    {
+      "id": "string",
+      "label": "String?",
+      "_origin": "ast",
+      "community": 21,
+      "community_name": "auth_provider.dart",
+      "file_type": "code",
+      "norm_label": "string?",
+      "source_file": null,
+      "source_location": null
     },
     {
       "id": "string_get",
@@ -8062,156 +7721,145 @@
       "type": "module"
     },
     {
-      "id": "dart_typed_data",
-      "label": "dart:typed_data",
+      "id": "dart_convert",
+      "label": "dart:convert",
       "_origin": "ast",
       "community": 23,
-      "community_name": "receipt_image_builder.dart",
+      "community_name": "auth_service.dart",
       "file_type": "code",
-      "norm_label": "dart:typed_data",
+      "norm_label": "dart:convert",
       "source_file": null,
       "source_location": null
     },
     {
-      "id": "dart_ui",
-      "label": "dart:ui",
+      "id": "lib_services_auth_service",
+      "label": "auth_service.dart",
       "_origin": "ast",
       "community": 23,
-      "community_name": "receipt_image_builder.dart",
+      "community_name": "auth_service.dart",
       "file_type": "code",
-      "norm_label": "dart:ui",
-      "source_file": null,
+      "norm_label": "auth_service.dart",
+      "source_file": "lib/services/auth_service.dart",
       "source_location": null
     },
     {
-      "id": "lib_services_receipt_image_builder",
-      "label": "receipt_image_builder.dart",
+      "id": "lib_services_auth_service_authservice",
+      "label": "AuthService",
       "_origin": "ast",
       "community": 23,
-      "community_name": "receipt_image_builder.dart",
+      "community_name": "auth_service.dart",
       "file_type": "code",
-      "norm_label": "receipt_image_builder.dart",
-      "source_file": "lib/services/receipt_image_builder.dart",
-      "source_location": null
+      "norm_label": "authservice",
+      "source_file": "lib/services/auth_service.dart",
+      "source_location": "L8"
     },
     {
-      "id": "lib_services_receipt_image_builder_align",
-      "label": "align",
+      "id": "lib_services_auth_service_createaccount",
+      "label": "createAccount",
       "_origin": "ast",
       "community": 23,
-      "community_name": "receipt_image_builder.dart",
+      "community_name": "auth_service.dart",
       "file_type": "code",
-      "norm_label": "align",
-      "source_file": "lib/services/receipt_image_builder.dart",
-      "source_location": "L18"
+      "norm_label": "createaccount",
+      "source_file": "lib/services/auth_service.dart",
+      "source_location": "L31"
     },
     {
-      "id": "lib_services_receipt_image_builder_bold",
-      "label": "bold",
+      "id": "lib_services_auth_service_db",
+      "label": "_db",
       "_origin": "ast",
       "community": 23,
-      "community_name": "receipt_image_builder.dart",
+      "community_name": "auth_service.dart",
       "file_type": "code",
-      "norm_label": "bold",
-      "source_file": "lib/services/receipt_image_builder.dart",
-      "source_location": "L17"
-    },
-    {
-      "id": "lib_services_receipt_image_builder_buildescposbytes",
-      "label": "buildEscPosBytes",
-      "_origin": "ast",
-      "community": 23,
-      "community_name": "receipt_image_builder.dart",
-      "file_type": "code",
-      "norm_label": "buildescposbytes",
-      "source_file": "lib/services/receipt_image_builder.dart",
-      "source_location": "L37"
-    },
-    {
-      "id": "lib_services_receipt_image_builder_fontsize",
-      "label": "fontSize",
-      "_origin": "ast",
-      "community": 23,
-      "community_name": "receipt_image_builder.dart",
-      "file_type": "code",
-      "norm_label": "fontsize",
-      "source_file": "lib/services/receipt_image_builder.dart",
-      "source_location": "L16"
-    },
-    {
-      "id": "lib_services_receipt_image_builder_left",
-      "label": "left",
-      "_origin": "ast",
-      "community": 23,
-      "community_name": "receipt_image_builder.dart",
-      "file_type": "code",
-      "norm_label": "left",
-      "source_file": "lib/services/receipt_image_builder.dart",
-      "source_location": "L14"
-    },
-    {
-      "id": "lib_services_receipt_image_builder_receiptalign",
-      "label": "ReceiptAlign",
-      "_origin": "ast",
-      "community": 23,
-      "community_name": "receipt_image_builder.dart",
-      "file_type": "code",
-      "norm_label": "receiptalign",
-      "source_file": "lib/services/receipt_image_builder.dart",
+      "norm_label": "_db",
+      "source_file": "lib/services/auth_service.dart",
       "source_location": "L9"
     },
     {
-      "id": "lib_services_receipt_image_builder_receiptimagebuilder",
-      "label": "ReceiptImageBuilder",
+      "id": "lib_services_auth_service_hashpassword",
+      "label": "hashPassword",
       "_origin": "ast",
       "community": 23,
-      "community_name": "receipt_image_builder.dart",
+      "community_name": "auth_service.dart",
       "file_type": "code",
-      "norm_label": "receiptimagebuilder",
-      "source_file": "lib/services/receipt_image_builder.dart",
-      "source_location": "L34"
+      "norm_label": "hashpassword",
+      "source_file": "lib/services/auth_service.dart",
+      "source_location": "L11"
     },
     {
-      "id": "lib_services_receipt_image_builder_receiptline",
-      "label": "ReceiptLine",
+      "id": "lib_services_auth_service_login",
+      "label": "login",
       "_origin": "ast",
       "community": 23,
-      "community_name": "receipt_image_builder.dart",
+      "community_name": "auth_service.dart",
       "file_type": "code",
-      "norm_label": "receiptline",
-      "source_file": "lib/services/receipt_image_builder.dart",
-      "source_location": "L13"
+      "norm_label": "login",
+      "source_file": "lib/services/auth_service.dart",
+      "source_location": "L16"
     },
     {
-      "id": "lib_services_receipt_image_builder_right",
-      "label": "right",
+      "id": "lib_services_auth_service_salt",
+      "label": "_salt",
       "_origin": "ast",
       "community": 23,
-      "community_name": "receipt_image_builder.dart",
+      "community_name": "auth_service.dart",
       "file_type": "code",
-      "norm_label": "right",
-      "source_file": "lib/services/receipt_image_builder.dart",
-      "source_location": "L15"
+      "norm_label": "_salt",
+      "source_file": "lib/services/auth_service.dart",
+      "source_location": "L6"
     },
     {
-      "id": "package_esc_pos_utils_plus_esc_pos_utils_plus_dart",
-      "label": "package:esc_pos_utils_plus/esc_pos_utils_plus.dart",
+      "id": "lib_services_auth_service_streamaccounts",
+      "label": "streamAccounts",
       "_origin": "ast",
       "community": 23,
-      "community_name": "receipt_image_builder.dart",
+      "community_name": "auth_service.dart",
       "file_type": "code",
-      "norm_label": "package:esc_pos_utils_plus/esc_pos_utils_plus.dart",
+      "norm_label": "streamaccounts",
+      "source_file": "lib/services/auth_service.dart",
+      "source_location": "L64"
+    },
+    {
+      "id": "lib_services_auth_service_updateaccount",
+      "label": "updateAccount",
+      "_origin": "ast",
+      "community": 23,
+      "community_name": "auth_service.dart",
+      "file_type": "code",
+      "norm_label": "updateaccount",
+      "source_file": "lib/services/auth_service.dart",
+      "source_location": "L49"
+    },
+    {
+      "id": "lib_services_auth_service_updatepassword",
+      "label": "updatePassword",
+      "_origin": "ast",
+      "community": 23,
+      "community_name": "auth_service.dart",
+      "file_type": "code",
+      "norm_label": "updatepassword",
+      "source_file": "lib/services/auth_service.dart",
+      "source_location": "L56"
+    },
+    {
+      "id": "models_account_model_dart",
+      "label": "../models/account_model.dart",
+      "_origin": "ast",
+      "community": 23,
+      "community_name": "auth_service.dart",
+      "file_type": "code",
+      "norm_label": "../models/account_model.dart",
       "source_file": null,
       "source_location": null
     },
     {
-      "id": "package_image_image_dart",
-      "label": "package:image/image.dart",
+      "id": "package_crypto_crypto_dart",
+      "label": "package:crypto/crypto.dart",
       "_origin": "ast",
       "community": 23,
-      "community_name": "receipt_image_builder.dart",
+      "community_name": "auth_service.dart",
       "file_type": "code",
-      "norm_label": "package:image/image.dart",
+      "norm_label": "package:crypto/crypto.dart",
       "source_file": null,
       "source_location": null
     },
@@ -8601,190 +8249,200 @@
       "source_location": null
     },
     {
-      "id": "readme",
-      "label": "README.md",
+      "id": "lib_services_discount_service",
+      "label": "discount_service.dart",
       "_origin": "ast",
       "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "page",
-      "norm_label": "readme.md",
-      "source_file": "README.md",
-      "source_location": "L1"
+      "community_name": "discount_service.dart",
+      "file_type": "code",
+      "norm_label": "discount_service.dart",
+      "source_file": "lib/services/discount_service.dart",
+      "source_location": null
     },
     {
-      "id": "readme_1_c\u00e0i_flutter",
-      "label": "1. C\u00e0i Flutter",
+      "id": "lib_services_discount_service_db",
+      "label": "_db",
       "_origin": "ast",
       "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "1. cai flutter",
-      "source_file": "README.md",
-      "source_location": "L16"
-    },
-    {
-      "id": "readme_2_c\u00e0i_dependencies",
-      "label": "2. C\u00e0i dependencies",
-      "_origin": "ast",
-      "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "2. cai dependencies",
-      "source_file": "README.md",
-      "source_location": "L25"
-    },
-    {
-      "id": "readme_3_c\u1ea5u_h\u00ecnh_firebase_cho_t\u1eebng_platform",
-      "label": "3. C\u1ea5u h\u00ecnh Firebase cho t\u1eebng platform",
-      "_origin": "ast",
-      "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "3. cau hinh firebase cho tung platform",
-      "source_file": "README.md",
-      "source_location": "L31"
-    },
-    {
-      "id": "readme_4_ch\u1ea1y_app",
-      "label": "4. Ch\u1ea1y app",
-      "_origin": "ast",
-      "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "4. chay app",
-      "source_file": "README.md",
-      "source_location": "L45"
-    },
-    {
-      "id": "readme_android",
-      "label": "Android",
-      "_origin": "ast",
-      "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "android",
-      "source_file": "README.md",
-      "source_location": "L33"
-    },
-    {
-      "id": "readme_cafe_admin_flutter_app",
-      "label": "Cafe Admin - Flutter App",
-      "_origin": "ast",
-      "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "cafe admin - flutter app",
-      "source_file": "README.md",
-      "source_location": "L1"
-    },
-    {
-      "id": "readme_c\u00e0i_\u0111\u1eb7t",
-      "label": "C\u00e0i \u0111\u1eb7t",
-      "_origin": "ast",
-      "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "cai \u0111at",
-      "source_file": "README.md",
-      "source_location": "L14"
-    },
-    {
-      "id": "readme_c\u1ea5u_tr\u00fac_project",
-      "label": "C\u1ea5u tr\u00fac project",
-      "_origin": "ast",
-      "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "cau truc project",
-      "source_file": "README.md",
-      "source_location": "L60"
-    },
-    {
-      "id": "readme_ios_macos",
-      "label": "iOS / macOS",
-      "_origin": "ast",
-      "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "ios / macos",
-      "source_file": "README.md",
-      "source_location": "L38"
-    },
-    {
-      "id": "readme_l\u01b0u_\u00fd",
-      "label": "L\u01b0u \u00fd",
-      "_origin": "ast",
-      "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "luu y",
-      "source_file": "README.md",
-      "source_location": "L82"
-    },
-    {
-      "id": "readme_t\u00ednh_n\u0103ng",
-      "label": "T\u00ednh n\u0103ng",
-      "_origin": "ast",
-      "community": 27,
-      "community_name": "Cafe Admin - Flutter App",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "tinh nang",
-      "source_file": "README.md",
+      "community_name": "discount_service.dart",
+      "file_type": "code",
+      "norm_label": "_db",
+      "source_file": "lib/services/discount_service.dart",
       "source_location": "L5"
     },
     {
-      "id": "claude_outputs_orders_screen_ordersscreenstate",
-      "label": "_OrdersScreenState",
+      "id": "lib_services_discount_service_delete",
+      "label": "delete",
       "_origin": "ast",
-      "community": 28,
-      "community_name": "_OrdersScreenState",
+      "community": 27,
+      "community_name": "discount_service.dart",
       "file_type": "code",
-      "norm_label": "_ordersscreenstate",
-      "source_file": "Claude outputs/orders_screen.dart",
-      "source_location": "L86"
+      "norm_label": "delete",
+      "source_file": "lib/services/discount_service.dart",
+      "source_location": "L29"
     },
     {
-      "id": "lib_screens_orders_orders_screen_ordersscreenstate",
-      "label": "_OrdersScreenState",
+      "id": "lib_services_discount_service_discountservice",
+      "label": "DiscountService",
       "_origin": "ast",
-      "community": 28,
-      "community_name": "_OrdersScreenState",
+      "community": 27,
+      "community_name": "discount_service.dart",
       "file_type": "code",
-      "norm_label": "_ordersscreenstate",
-      "source_file": "lib/screens/orders/orders_screen.dart",
-      "source_location": "L120"
+      "norm_label": "discountservice",
+      "source_file": "lib/services/discount_service.dart",
+      "source_location": "L4"
     },
     {
-      "id": "ordersscreen",
-      "label": "OrdersScreen",
+      "id": "lib_services_discount_service_incrementusage",
+      "label": "incrementUsage",
       "_origin": "ast",
-      "community": 28,
-      "community_name": "_OrdersScreenState",
+      "community": 27,
+      "community_name": "discount_service.dart",
       "file_type": "code",
-      "norm_label": "ordersscreen",
+      "norm_label": "incrementusage",
+      "source_file": "lib/services/discount_service.dart",
+      "source_location": "L38"
+    },
+    {
+      "id": "lib_services_discount_service_save",
+      "label": "save",
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "discount_service.dart",
+      "file_type": "code",
+      "norm_label": "save",
+      "source_file": "lib/services/discount_service.dart",
+      "source_location": "L17"
+    },
+    {
+      "id": "lib_services_discount_service_streamdiscounts",
+      "label": "streamDiscounts",
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "discount_service.dart",
+      "file_type": "code",
+      "norm_label": "streamdiscounts",
+      "source_file": "lib/services/discount_service.dart",
+      "source_location": "L7"
+    },
+    {
+      "id": "lib_services_discount_service_toggle",
+      "label": "toggle",
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "discount_service.dart",
+      "file_type": "code",
+      "norm_label": "toggle",
+      "source_file": "lib/services/discount_service.dart",
+      "source_location": "L33"
+    },
+    {
+      "id": "models_discount_model_dart",
+      "label": "../models/discount_model.dart",
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "discount_service.dart",
+      "file_type": "code",
+      "norm_label": "../models/discount_model.dart",
       "source_file": null,
       "source_location": null
     },
     {
-      "id": "singletickerproviderstatemixin",
-      "label": "SingleTickerProviderStateMixin",
+      "id": "lib_services_invoice_service",
+      "label": "invoice_service.dart",
       "_origin": "ast",
       "community": 28,
-      "community_name": "_OrdersScreenState",
+      "community_name": "package:cloud_firestore/cloud_firestore.dart",
       "file_type": "code",
-      "norm_label": "singletickerproviderstatemixin",
+      "norm_label": "invoice_service.dart",
+      "source_file": "lib/services/invoice_service.dart",
+      "source_location": null
+    },
+    {
+      "id": "lib_services_invoice_service_db",
+      "label": "_db",
+      "_origin": "ast",
+      "community": 28,
+      "community_name": "package:cloud_firestore/cloud_firestore.dart",
+      "file_type": "code",
+      "norm_label": "_db",
+      "source_file": "lib/services/invoice_service.dart",
+      "source_location": "L5"
+    },
+    {
+      "id": "lib_services_invoice_service_getlatestactivefororder",
+      "label": "getLatestActiveForOrder",
+      "_origin": "ast",
+      "community": 28,
+      "community_name": "package:cloud_firestore/cloud_firestore.dart",
+      "file_type": "code",
+      "norm_label": "getlatestactivefororder",
+      "source_file": "lib/services/invoice_service.dart",
+      "source_location": "L50"
+    },
+    {
+      "id": "lib_services_invoice_service_getlatestactivefortable",
+      "label": "getLatestActiveForTable",
+      "_origin": "ast",
+      "community": 28,
+      "community_name": "package:cloud_firestore/cloud_firestore.dart",
+      "file_type": "code",
+      "norm_label": "getlatestactivefortable",
+      "source_file": "lib/services/invoice_service.dart",
+      "source_location": "L8"
+    },
+    {
+      "id": "lib_services_invoice_service_invoiceservice",
+      "label": "InvoiceService",
+      "_origin": "ast",
+      "community": 28,
+      "community_name": "package:cloud_firestore/cloud_firestore.dart",
+      "file_type": "code",
+      "norm_label": "invoiceservice",
+      "source_file": "lib/services/invoice_service.dart",
+      "source_location": "L4"
+    },
+    {
+      "id": "lib_services_invoice_service_saveinvoice",
+      "label": "saveInvoice",
+      "_origin": "ast",
+      "community": 28,
+      "community_name": "package:cloud_firestore/cloud_firestore.dart",
+      "file_type": "code",
+      "norm_label": "saveinvoice",
+      "source_file": "lib/services/invoice_service.dart",
+      "source_location": "L85"
+    },
+    {
+      "id": "lib_services_invoice_service_setpaymentmethod",
+      "label": "setPaymentMethod",
+      "_origin": "ast",
+      "community": 28,
+      "community_name": "package:cloud_firestore/cloud_firestore.dart",
+      "file_type": "code",
+      "norm_label": "setpaymentmethod",
+      "source_file": "lib/services/invoice_service.dart",
+      "source_location": "L128"
+    },
+    {
+      "id": "lib_services_invoice_service_supersede",
+      "label": "supersede",
+      "_origin": "ast",
+      "community": 28,
+      "community_name": "package:cloud_firestore/cloud_firestore.dart",
+      "file_type": "code",
+      "norm_label": "supersede",
+      "source_file": "lib/services/invoice_service.dart",
+      "source_location": "L75"
+    },
+    {
+      "id": "package_cloud_firestore_cloud_firestore_dart",
+      "label": "package:cloud_firestore/cloud_firestore.dart",
+      "_origin": "ast",
+      "community": 28,
+      "community_name": "package:cloud_firestore/cloud_firestore.dart",
+      "file_type": "code",
+      "norm_label": "package:cloud_firestore/cloud_firestore.dart",
       "source_file": null,
       "source_location": null
     },
@@ -8842,6 +8500,28 @@
       "norm_label": "uiapplication",
       "source_file": "",
       "source_location": ""
+    },
+    {
+      "id": "dart_typed_data",
+      "label": "dart:typed_data",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "dart:typed_data",
+      "source_file": null,
+      "source_location": null
+    },
+    {
+      "id": "dart_ui",
+      "label": "dart:ui",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "dart:ui",
+      "source_file": null,
+      "source_location": null
     },
     {
       "id": "lib_core_theme_app_theme",
@@ -9152,6 +8832,127 @@
       "source_location": "L28"
     },
     {
+      "id": "lib_services_receipt_image_builder",
+      "label": "receipt_image_builder.dart",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "receipt_image_builder.dart",
+      "source_file": "lib/services/receipt_image_builder.dart",
+      "source_location": null
+    },
+    {
+      "id": "lib_services_receipt_image_builder_align",
+      "label": "align",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "align",
+      "source_file": "lib/services/receipt_image_builder.dart",
+      "source_location": "L18"
+    },
+    {
+      "id": "lib_services_receipt_image_builder_bold",
+      "label": "bold",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "bold",
+      "source_file": "lib/services/receipt_image_builder.dart",
+      "source_location": "L17"
+    },
+    {
+      "id": "lib_services_receipt_image_builder_buildescposbytes",
+      "label": "buildEscPosBytes",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "buildescposbytes",
+      "source_file": "lib/services/receipt_image_builder.dart",
+      "source_location": "L37"
+    },
+    {
+      "id": "lib_services_receipt_image_builder_fontsize",
+      "label": "fontSize",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "fontsize",
+      "source_file": "lib/services/receipt_image_builder.dart",
+      "source_location": "L16"
+    },
+    {
+      "id": "lib_services_receipt_image_builder_left",
+      "label": "left",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "left",
+      "source_file": "lib/services/receipt_image_builder.dart",
+      "source_location": "L14"
+    },
+    {
+      "id": "lib_services_receipt_image_builder_receiptalign",
+      "label": "ReceiptAlign",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "receiptalign",
+      "source_file": "lib/services/receipt_image_builder.dart",
+      "source_location": "L9"
+    },
+    {
+      "id": "lib_services_receipt_image_builder_receiptimagebuilder",
+      "label": "ReceiptImageBuilder",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "receiptimagebuilder",
+      "source_file": "lib/services/receipt_image_builder.dart",
+      "source_location": "L34"
+    },
+    {
+      "id": "lib_services_receipt_image_builder_receiptline",
+      "label": "ReceiptLine",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "receiptline",
+      "source_file": "lib/services/receipt_image_builder.dart",
+      "source_location": "L13"
+    },
+    {
+      "id": "lib_services_receipt_image_builder_right",
+      "label": "right",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "right",
+      "source_file": "lib/services/receipt_image_builder.dart",
+      "source_location": "L15"
+    },
+    {
+      "id": "package_esc_pos_utils_plus_esc_pos_utils_plus_dart",
+      "label": "package:esc_pos_utils_plus/esc_pos_utils_plus.dart",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "package:esc_pos_utils_plus/esc_pos_utils_plus.dart",
+      "source_file": null,
+      "source_location": null
+    },
+    {
       "id": "package_google_fonts_google_fonts_dart",
       "label": "package:google_fonts/google_fonts.dart",
       "_origin": "ast",
@@ -9159,6 +8960,17 @@
       "community_name": "app_theme.dart",
       "file_type": "code",
       "norm_label": "package:google_fonts/google_fonts.dart",
+      "source_file": null,
+      "source_location": null
+    },
+    {
+      "id": "package_image_image_dart",
+      "label": "package:image/image.dart",
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "app_theme.dart",
+      "file_type": "code",
+      "norm_label": "package:image/image.dart",
       "source_file": null,
       "source_location": null
     },
@@ -9178,10 +8990,10 @@
       "label": "Flutter",
       "_origin": "ast",
       "community": 30,
-      "community_name": "Flutter",
+      "community_name": "ios/RunnerTests/RunnerTests.swift",
       "file_type": "code",
       "norm_label": "flutter",
-      "source_file": "ios/RunnerTests/RunnerTests.swift",
+      "source_file": "ios/Runner/AppDelegate.swift",
       "source_location": "L1",
       "type": "module"
     },
@@ -9190,7 +9002,7 @@
       "label": "FlutterSceneDelegate",
       "_origin": "ast",
       "community": 30,
-      "community_name": "Flutter",
+      "community_name": "ios/RunnerTests/RunnerTests.swift",
       "file_type": "code",
       "norm_label": "flutterscenedelegate",
       "source_file": "",
@@ -9201,7 +9013,7 @@
       "label": "ios/Runner/AppDelegate.swift",
       "_origin": "ast",
       "community": 30,
-      "community_name": "Flutter",
+      "community_name": "ios/RunnerTests/RunnerTests.swift",
       "file_type": "code",
       "norm_label": "ios/runner/appdelegate.swift",
       "source_file": "ios/Runner/AppDelegate.swift",
@@ -9212,10 +9024,21 @@
       "label": "SceneDelegate.swift",
       "_origin": "ast",
       "community": 30,
-      "community_name": "Flutter",
+      "community_name": "ios/RunnerTests/RunnerTests.swift",
       "file_type": "code",
       "norm_label": "scenedelegate.swift",
       "source_file": "ios/Runner/SceneDelegate.swift",
+      "source_location": "L1"
+    },
+    {
+      "id": "ios_runnertests_runnertests",
+      "label": "ios/RunnerTests/RunnerTests.swift",
+      "_origin": "ast",
+      "community": 30,
+      "community_name": "ios/RunnerTests/RunnerTests.swift",
+      "file_type": "code",
+      "norm_label": "ios/runnertests/runnertests.swift",
+      "source_file": "ios/RunnerTests/RunnerTests.swift",
       "source_location": "L1"
     },
     {
@@ -9223,11 +9046,23 @@
       "label": "UIKit",
       "_origin": "ast",
       "community": 30,
-      "community_name": "Flutter",
+      "community_name": "ios/RunnerTests/RunnerTests.swift",
       "file_type": "code",
       "norm_label": "uikit",
-      "source_file": "ios/RunnerTests/RunnerTests.swift",
+      "source_file": "ios/Runner/AppDelegate.swift",
       "source_location": "L2",
+      "type": "module"
+    },
+    {
+      "id": "xctest",
+      "label": "XCTest",
+      "_origin": "ast",
+      "community": 30,
+      "community_name": "ios/RunnerTests/RunnerTests.swift",
+      "file_type": "code",
+      "norm_label": "xctest",
+      "source_file": "ios/RunnerTests/RunnerTests.swift",
+      "source_location": "L3",
       "type": "module"
     },
     {
@@ -9271,7 +9106,7 @@
       "community_name": "FlutterMacOS",
       "file_type": "code",
       "norm_label": "cocoa",
-      "source_file": "macos/RunnerTests/RunnerTests.swift",
+      "source_file": "macos/Runner/AppDelegate.swift",
       "source_location": "L1",
       "type": "module"
     },
@@ -9283,7 +9118,7 @@
       "community_name": "FlutterMacOS",
       "file_type": "code",
       "norm_label": "fluttermacos",
-      "source_file": "macos/RunnerTests/RunnerTests.swift",
+      "source_file": "macos/Runner/AppDelegate.swift",
       "source_location": "L2",
       "type": "module"
     },
@@ -9307,6 +9142,17 @@
       "file_type": "code",
       "norm_label": "mainflutterwindow.swift",
       "source_file": "macos/Runner/MainFlutterWindow.swift",
+      "source_location": "L1"
+    },
+    {
+      "id": "macos_runnertests_runnertests",
+      "label": "macos/RunnerTests/RunnerTests.swift",
+      "_origin": "ast",
+      "community": 32,
+      "community_name": "FlutterMacOS",
+      "file_type": "code",
+      "norm_label": "macos/runnertests/runnertests.swift",
+      "source_file": "macos/RunnerTests/RunnerTests.swift",
       "source_location": "L1"
     },
     {
@@ -9365,45 +9211,11 @@
       "source_location": ""
     },
     {
-      "id": "ios_runnertests_runnertests",
-      "label": "ios/RunnerTests/RunnerTests.swift",
-      "_origin": "ast",
-      "community": 35,
-      "community_name": "ios/RunnerTests/RunnerTests.swift",
-      "file_type": "code",
-      "norm_label": "ios/runnertests/runnertests.swift",
-      "source_file": "ios/RunnerTests/RunnerTests.swift",
-      "source_location": "L1"
-    },
-    {
-      "id": "macos_runnertests_runnertests",
-      "label": "macos/RunnerTests/RunnerTests.swift",
-      "_origin": "ast",
-      "community": 35,
-      "community_name": "ios/RunnerTests/RunnerTests.swift",
-      "file_type": "code",
-      "norm_label": "macos/runnertests/runnertests.swift",
-      "source_file": "macos/RunnerTests/RunnerTests.swift",
-      "source_location": "L1"
-    },
-    {
-      "id": "xctest",
-      "label": "XCTest",
-      "_origin": "ast",
-      "community": 35,
-      "community_name": "ios/RunnerTests/RunnerTests.swift",
-      "file_type": "code",
-      "norm_label": "xctest",
-      "source_file": "macos/RunnerTests/RunnerTests.swift",
-      "source_location": "L3",
-      "type": "module"
-    },
-    {
       "id": "xctestcase",
       "label": "XCTestCase",
       "_origin": "ast",
       "community": 35,
-      "community_name": "ios/RunnerTests/RunnerTests.swift",
+      "community_name": "RunnerTests",
       "file_type": "code",
       "norm_label": "xctestcase",
       "source_file": "",
@@ -9982,28 +9794,15 @@
       "source_location": "L1"
     },
     {
-      "id": "ios_runner_assets_xcassets_launchimage_imageset_readme",
-      "label": "LaunchImage.imageset/README.md",
+      "id": "icondata",
+      "label": "IconData",
       "_origin": "ast",
-      "community": 42,
-      "community_name": "LaunchImage.imageset/README.md",
-      "file_type": "document",
-      "node_kind": "page",
-      "norm_label": "launchimage.imageset/readme.md",
-      "source_file": "ios/Runner/Assets.xcassets/LaunchImage.imageset/README.md",
-      "source_location": "L1"
-    },
-    {
-      "id": "ios_runner_assets_xcassets_launchimage_imageset_readme_launch_screen_assets",
-      "label": "Launch Screen Assets",
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "LaunchImage.imageset/README.md",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "launch screen assets",
-      "source_file": "ios/Runner/Assets.xcassets/LaunchImage.imageset/README.md",
-      "source_location": "L1"
+      "community": 5,
+      "community_name": "menu_screen.dart",
+      "file_type": "code",
+      "norm_label": "icondata",
+      "source_file": null,
+      "source_location": null
     },
     {
       "id": "lib_screens_menu_menu_screen",
@@ -10556,6 +10355,17 @@
       "source_location": "L2627"
     },
     {
+      "id": "claude_outputs_orders_screen_ordersscreenstate",
+      "label": "_OrdersScreenState",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "State",
+      "file_type": "code",
+      "norm_label": "_ordersscreenstate",
+      "source_file": "Claude outputs/orders_screen.dart",
+      "source_location": "L86"
+    },
+    {
       "id": "claude_outputs_orders_screen_paymentdialogstate",
       "label": "_PaymentDialogState",
       "_origin": "ast",
@@ -10710,6 +10520,17 @@
       "source_location": "L2942"
     },
     {
+      "id": "lib_screens_orders_orders_screen_ordersscreenstate",
+      "label": "_OrdersScreenState",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "State",
+      "file_type": "code",
+      "norm_label": "_ordersscreenstate",
+      "source_file": "lib/screens/orders/orders_screen.dart",
+      "source_location": "L120"
+    },
+    {
       "id": "lib_screens_orders_orders_screen_paymentdialogstate",
       "label": "_PaymentDialogState",
       "_origin": "ast",
@@ -10754,6 +10575,17 @@
       "source_location": null
     },
     {
+      "id": "ordersscreen",
+      "label": "OrdersScreen",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "State",
+      "file_type": "code",
+      "norm_label": "ordersscreen",
+      "source_file": null,
+      "source_location": null
+    },
+    {
       "id": "paymentdialog",
       "label": "_PaymentDialog",
       "_origin": "ast",
@@ -10772,6 +10604,17 @@
       "community_name": "State",
       "file_type": "code",
       "norm_label": "_postab",
+      "source_file": null,
+      "source_location": null
+    },
+    {
+      "id": "singletickerproviderstatemixin",
+      "label": "SingleTickerProviderStateMixin",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "State",
+      "file_type": "code",
+      "norm_label": "singletickerproviderstatemixin",
       "source_file": null,
       "source_location": null
     },
@@ -11722,17 +11565,6 @@
       "source_location": "L7"
     },
     {
-      "id": "list",
-      "label": "List",
-      "_origin": "ast",
-      "community": 9,
-      "community_name": "printer_settings_screen.dart",
-      "file_type": "code",
-      "norm_label": "list",
-      "source_file": null,
-      "source_location": null
-    },
-    {
       "id": "package_flutter_pos_printer_platform_image_3_flutter_pos_printer_platform_image_3_dart",
       "label": "package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart",
       "_origin": "ast",
@@ -11790,7 +11622,6 @@
     {
       "id": "log",
       "label": "log",
-      "_origin": "semantic",
       "community": 31,
       "community_name": "GeneratedPluginRegistrant.java",
       "external": true,
@@ -11802,7 +11633,6 @@
     {
       "id": "nonnull",
       "label": "nonnull",
-      "_origin": "semantic",
       "community": 31,
       "community_name": "GeneratedPluginRegistrant.java",
       "external": true,
@@ -11814,23 +11644,11 @@
     {
       "id": "sessions_rcw_01b2brcakgnszpufv2tlgjf3_mnt_cafe_order_flutter_ios_runner_generatedpluginregistrant_h",
       "label": "sessions_rcw_01b2brcakgnszpufv2tlgjf3_mnt_cafe_order_flutter_ios_runner_generatedpluginregistrant_h",
-      "_origin": "semantic",
-      "community": 43,
-      "community_name": "sessions_rcw_01b2brcakgnszpufv2tlgjf3_mnt_cafe_order_flutter_ios_runner_generatedpluginregistrant_h",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "sessions_rcw_01b2brcakgnszpufv2tlgjf3_mnt_cafe_order_flutter_ios_runner_generatedpluginregistrant_h",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "users_admin_cafe_order_flutter_ios_runner_generatedpluginregistrant_h",
-      "label": "users_admin_cafe_order_flutter_ios_runner_generatedpluginregistrant_h",
       "community": 37,
       "community_name": "Runner-Bridging-Header.h",
       "external": true,
       "file_type": "concept",
-      "norm_label": "users_admin_cafe_order_flutter_ios_runner_generatedpluginregistrant_h",
+      "norm_label": "sessions_rcw_01b2brcakgnszpufv2tlgjf3_mnt_cafe_order_flutter_ios_runner_generatedpluginregistrant_h",
       "source_file": "",
       "type": "external"
     }
@@ -12066,7 +11884,7 @@
     },
     {
       "source": "ios_runner_runner_bridging_header",
-      "target": "users_admin_cafe_order_flutter_ios_runner_generatedpluginregistrant_h",
+      "target": "sessions_rcw_01b2brcakgnszpufv2tlgjf3_mnt_cafe_order_flutter_ios_runner_generatedpluginregistrant_h",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -13980,17 +13798,6 @@
       "weight": 1.0
     },
     {
-      "source": "ios_runner_assets_xcassets_launchimage_imageset_readme",
-      "target": "ios_runner_assets_xcassets_launchimage_imageset_readme_launch_screen_assets",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "ios/Runner/Assets.xcassets/LaunchImage.imageset/README.md",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
       "source": "ios_runner_scenedelegate",
       "target": "ios_runner_scenedelegate_scenedelegate",
       "relation": "contains",
@@ -14054,127 +13861,6 @@
       "confidence_score": 1.0,
       "source_file": "macos/RunnerTests/RunnerTests.swift",
       "source_location": "L5",
-      "weight": 1.0
-    },
-    {
-      "source": "readme",
-      "target": "readme_cafe_admin_flutter_app",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_3_c\u1ea5u_h\u00ecnh_firebase_cho_t\u1eebng_platform",
-      "target": "readme_android",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L33",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_3_c\u1ea5u_h\u00ecnh_firebase_cho_t\u1eebng_platform",
-      "target": "readme_ios_macos",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L38",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_cafe_admin_flutter_app",
-      "target": "readme_c\u00e0i_\u0111\u1eb7t",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L14",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_cafe_admin_flutter_app",
-      "target": "readme_t\u00ednh_n\u0103ng",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L5",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_cafe_admin_flutter_app",
-      "target": "readme_c\u1ea5u_tr\u00fac_project",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L60",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_cafe_admin_flutter_app",
-      "target": "readme_l\u01b0u_\u00fd",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L82",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_c\u00e0i_\u0111\u1eb7t",
-      "target": "readme_1_c\u00e0i_flutter",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L16",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_c\u00e0i_\u0111\u1eb7t",
-      "target": "readme_2_c\u00e0i_dependencies",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L25",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_c\u00e0i_\u0111\u1eb7t",
-      "target": "readme_3_c\u1ea5u_h\u00ecnh_firebase_cho_t\u1eebng_platform",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L31",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_c\u00e0i_\u0111\u1eb7t",
-      "target": "readme_4_ch\u1ea1y_app",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L45",
       "weight": 1.0
     },
     {
@@ -26676,5 +26362,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "6a04d2c7219f03d035d33f2af1f11f8ef50da75f"
+  "built_at_commit": "b9f187f6a300f03a5e9494abecd2d6ed286ebbed"
 }

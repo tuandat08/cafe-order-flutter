@@ -29,6 +29,7 @@ import '../../models/discount_model.dart';
 import '../../services/menu_service.dart';
 import '../../services/order_service.dart';
 import '../../services/table_service.dart';
+import '../../widgets/floor_plan_board.dart';
 import '../../services/discount_service.dart';
 import '../../services/invoice_service.dart';
 
@@ -146,6 +147,7 @@ class _OrdersScreenState extends State<OrdersScreen>
   late final TabController _tab = TabController(length: 3, vsync: this, initialIndex: 2);
   int _tabIndex = 2; // mặc định mở tab "Bàn (POS)" (đã ẩn tab "Đơn hàng")
   bool _soundEnabled = true; // bật/tắt âm thanh thông báo — icon chuông trên top bar
+  final _posTabKey = GlobalKey<_POSTabState>(); // để nút "Sơ đồ bàn" ở top bar gọi chọn bàn vào tab POS
 
   @override
   void initState() {
@@ -176,7 +178,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           Expanded(
             child: IndexedStack(
               index: _tabIndex,
-              children: const [_POSTab(), _KDSTab(), _TableBoardTab()],
+              children: [_POSTab(key: _posTabKey), const _KDSTab(), const _TableBoardTab()],
             ),
           ),
         ]),
@@ -206,6 +208,8 @@ class _OrdersScreenState extends State<OrdersScreen>
         _tabBtn(2, Icons.table_restaurant_rounded, 'Bàn (POS)'),
         const SizedBox(width: 8),
         _tabBtn(0, Icons.point_of_sale_rounded, 'POS - Tạo đơn'),
+        const SizedBox(width: 8),
+        _floorPlanBtn(),
         const Spacer(),
         // 🖨️ cài đặt máy in nhiệt (ESC/POS)
         IconButton(
@@ -367,13 +371,47 @@ class _OrdersScreenState extends State<OrdersScreen>
       ),
     );
   }
+
+  // Nút mở sơ đồ bàn trực quan (đúng bố cục đã setting ở web) — đặt cạnh nút
+  // "POS - Tạo đơn". Bấm vào 1 bàn trên sơ đồ sẽ chuyển sang tab POS và chọn
+  // luôn bàn đó cho đơn đang tạo.
+  Widget _floorPlanBtn() {
+    return GestureDetector(
+      onTap: () async {
+        _tab.animateTo(0);
+        setState(() => _tabIndex = 0);
+        final selected = await showDialog<String>(
+          context: context,
+          builder: (ctx) => const FloorPlanPickerDialog(),
+        );
+        if (selected != null && selected.isNotEmpty) {
+          _posTabKey.currentState?.selectTableFromFloorPlan(selected);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: const Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.map_rounded, size: 16, color: AppColors.textSecondary),
+          SizedBox(width: 6),
+          Text('Sơ đồ bàn', style: TextStyle(
+            color: AppColors.textSecondary, fontWeight: FontWeight.w500, fontSize: 13,
+          )),
+        ]),
+      ),
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════
 //  POS TAB
 // ═══════════════════════════════════════════════════════
 class _POSTab extends StatefulWidget {
-  const _POSTab();
+  const _POSTab({super.key});
   @override
   State<_POSTab> createState() => _POSTabState();
 }
@@ -442,6 +480,13 @@ class _POSTabState extends State<_POSTab> {
     if (selected != null && selected.isNotEmpty && mounted) {
       setState(() { _tableId = selected; _tablePicked = true; });
     }
+  }
+
+  // Chọn bàn trực tiếp từ sơ đồ mở bên ngoài (nút trên thanh tab) — gọi qua
+  // GlobalKey (xem _posTabKey ở _OrdersScreenState).
+  void selectTableFromFloorPlan(String tableId) {
+    if (!mounted) return;
+    setState(() { _tableId = tableId; _tablePicked = true; });
   }
 
   void _addItem(MenuItemModel item) {
@@ -531,17 +576,37 @@ class _POSTabState extends State<_POSTab> {
                   }
                   final occupied = _occupiedTableIds.contains(_tableId);
                   final service = tables.where((t) => t.id == _tableId).firstOrNull?.serviceRequest != null;
-                  final dot = service
-                      ? const Color(0xFFF59E0B) // gọi phục vụ — vàng
-                      : (occupied ? AppColors.success : const Color(0xFF94A3B8)); // đang phục vụ — xanh / trống — xám
+                  // Nền + viền + chữ của chip cũng đổi theo trạng thái (không chỉ chấm tròn),
+                  // giống hệt 3 trạng thái ở dialog "Chọn bàn": xám trống / xanh đang phục vụ / vàng gọi phục vụ.
+                  final Color dot;
+                  final Color chipBg;
+                  final Color chipBorder;
+                  final Color chipText;
+                  if (service) {
+                    dot = const Color(0xFFF59E0B);
+                    chipBg = const Color(0xFFFEF3C7);
+                    chipBorder = const Color(0xFFF59E0B);
+                    chipText = const Color(0xFFB45309);
+                  } else if (occupied) {
+                    dot = AppColors.success;
+                    chipBg = const Color(0xFFDCFCE7);
+                    chipBorder = AppColors.success;
+                    chipText = const Color(0xFF15803D);
+                  } else {
+                    dot = const Color(0xFF94A3B8);
+                    chipBg = AppColors.background;
+                    chipBorder = AppColors.divider;
+                    chipText = AppColors.textPrimary;
+                  }
                   return GestureDetector(
                     onTap: _openTablePicker,
-                    child: Container(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: AppColors.background,
+                        color: chipBg,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.divider),
+                        border: Border.all(color: chipBorder),
                       ),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
                         Container(
@@ -551,10 +616,10 @@ class _POSTabState extends State<_POSTab> {
                         const SizedBox(width: 8),
                         Text(
                           _tableLabel(_tableId).isEmpty ? 'Chọn bàn' : _tableLabel(_tableId),
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: chipText),
                         ),
                         const SizedBox(width: 6),
-                        const Icon(Icons.expand_more_rounded, size: 18, color: AppColors.textSecondary),
+                        Icon(Icons.expand_more_rounded, size: 18, color: chipText.withOpacity(0.7)),
                       ]),
                     ),
                   );
@@ -5053,24 +5118,6 @@ class _TableBoardTabState extends State<_TableBoardTab> {
               _boardChip('Chờ đóng bàn', const Color(0xFFFFEDD5), const Color(0xFFC2410C)),
             _boardChip('$itemCount món', const Color(0xFFF1F5F9), const Color(0xFF475569)),
             if (service) _boardChip('Gọi phục vụ', const Color(0xFFFEF3C7), const Color(0xFFB45309)),
-            // Thao tác nhanh ngay trên thẻ: đỡ phải mở panel chi tiết mới đánh dấu xong được
-            if (!allDone)
-              GestureDetector(
-                onTap: () {
-                  for (final o in orders) {
-                    if (!_isDone(o.status)) _handleUpdateStatus(o.id, 'completed');
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: billGreen, borderRadius: BorderRadius.circular(20)),
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.check_rounded, size: 12, color: Colors.white),
-                    SizedBox(width: 3),
-                    Text('Xong hết', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
-                  ]),
-                ),
-              ),
           ]),
         ]),
       ),

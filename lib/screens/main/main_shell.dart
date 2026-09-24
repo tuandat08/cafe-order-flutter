@@ -38,7 +38,11 @@ class _MainShellState extends State<MainShell> {
   // build(), vì build() chạy lại mỗi khi đổi tab (setState _selectedIndex),
   // nếu tạo stream mới mỗi lần sẽ hủy/mở lại kết nối Firestore liên tục → giật lag.
   late final bool _requiresShift;
-  Stream<ShiftModel?>? _openShiftStream;
+  // Toàn bộ ca đang mở của MỌI nhân viên (không chỉ riêng người đăng nhập) — dùng
+  // để phát hiện ca cũ bị bỏ dở từ NGƯờI KHÁC, vì ngăn kéo tiền là dùng chung:
+  // staff A mở ca rồi thoát app kiểu vượt-tắt → lần sau dù admin hay staff B đăng
+  // nhập cũng phải bị chặn bởi ca cũ của staff A cho đến khi nó được đóng.
+  Stream<List<ShiftModel>>? _allOpenShiftsStream;
 
   // true trong lúc đang xử lý đóng ca để đăng xuất (bị ép hoặc chủ động) —
   // build() sẽ tạm bỏ qua hẳn cổng "cần mở ca" phản ứng theo stream trong
@@ -54,9 +58,15 @@ class _MainShellState extends State<MainShell> {
     _isAdmin = context.read<AuthProvider>().isAdmin;
 
     final currentUser = context.read<AuthProvider>().currentUser;
-    if (currentUser != null && currentUser.role != 'kitchen') {
-      _requiresShift = true;
-      _openShiftStream = _shiftService.watchOpenShift(currentUser.id);
+    // _requiresShift: có BUẸC phải MỜ ca mới được dùng app hay không — vẫn chỉ
+    // áp dụng cho tài khoản không phải bếp (bếp không thao tác tiền nên không bắt
+    // buộc phải mở ca). Riêng việc PHÁT HIỆN ca cũ bị bỏ dở (do thoát app kiểu
+    // vượt-tắt) thì áp dụng cho MọI tài khoản đã từng mở ca (kể cả bếp, nếu họ từ
+    // mở ca từ màn Kểm ca) — vì vậy stream luôn được tạo cho mọi tài khoản đăng nhập,
+    // không chỉ riêng tài khoản bắt buộc mở ca.
+    if (currentUser != null) {
+      _requiresShift = currentUser.role != 'kitchen';
+      _allOpenShiftsStream = _shiftService.watchAllOpenShifts();
     } else {
       _requiresShift = false;
     }
@@ -144,7 +154,9 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_requiresShift) return _buildShell();
+    // Không có stream (không xác định được currentUser ở initState) — trường
+    // hợp an toàn dự phòng, không nên xảy ra trên thực tế.
+    if (_openShiftStream == null) return _buildShell();
 
     // Đang trong lúc đóng ca để đăng xuất → CHỦ ĐỘNG không xét stream ca mở
     // nữa, luôn hiện màn hình chờ đơn giản. Đây là điểm sửa gốc rễ: nếu vẫn
@@ -164,14 +176,37 @@ class _MainShellState extends State<MainShell> {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
-        if (snap.data == null) {
-          // Chưa mở ca — chặn toàn bộ app, bắt buộc mở ca trước.
+        final openShift = snap.data;
+
+        // Bước 1 — ÁP DỤNG CHO MỌI TÀI KHOẢN đã từng mở ca (kể cả bếp, nếu
+        // có): nếu ca đang mở là từ một ngày trước đó, gần như chắc chắn do app bị
+        // thoát (vượt-tắt/force-kill) mà không đăng xuất hay đóng ca. Bắt buộc kiểm
+        // ca thủ công (đếm tiền thật) trước khi cho vào app — không tự động đóng
+        // ngầm, không cho bỏ qua, không phân biệt vai trò tài khoản.
+        if (openShift != null) {
+          final now = DateTime.now();
+          final opened = openShift.openedAt;
+          final isStale = opened.year != now.year ||
+              opened.month != now.month ||
+              opened.day != now.day;
+          if (isStale) {
+            return StaleShiftGateScreen(
+              shift: openShift,
+              shiftService: _shiftService,
+            );
+          }
+        }
+
+        // Bước 2 — chỉ áp dụng cho tài khoản bắt buộc phải mở ca (không phải bếp):
+        // chưa mở ca — chặn toàn bộ app, bắt buộc mở ca trước.
+        if (_requiresShift && openShift == null) {
           return OpenShiftGateScreen(
             staffId: user.id,
             staffName: user.fullName,
             shiftService: _shiftService,
           );
         }
+
         return _buildShell();
       },
     );

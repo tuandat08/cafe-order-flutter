@@ -156,7 +156,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                   if (isAdmin) ...[
                     const SizedBox(height: 24),
                     const Text(
-                      'Lịch sử ca đã đóng',
+                      'Lịch sử ca đã đóng hôm nay',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                     const SizedBox(height: 12),
@@ -419,6 +419,250 @@ class _OpenShiftGateScreenState extends State<OpenShiftGateScreen> {
                               : () => context.read<AuthProvider>().logout(),
                           child: const Text(
                             'Hủy',
+                            style: TextStyle(color: AppColors.textSecondary),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Cong CHAN bat buoc khi phat hien ca lam viec mo tu mot ngay truoc do
+/// (staff da tat app kieu vuot-tat/force-kill ma khong dang xuat hay dong ca,
+/// hoac quen dong ca). Vi he dieu hanh khong cho ung dung co hoi chay code
+/// khi bi buoc tat nhu vay, cach duy nhat kha thi la chan o lan dang nhap/mo
+/// app ke tiep: bat buoc dem va nhap tien mat thuc te de dong ca cu truoc,
+/// KHONG cho phep bo qua hay tu dong dong ngam - dam bao so lieu ca luon
+/// duoc doi soat thuc te boi con nguoi.
+class StaleShiftGateScreen extends StatefulWidget {
+  final ShiftModel shift;
+  final ShiftService shiftService;
+
+  const StaleShiftGateScreen({
+    super.key,
+    required this.shift,
+    required this.shiftService,
+  });
+
+  @override
+  State<StaleShiftGateScreen> createState() => _StaleShiftGateScreenState();
+}
+
+class _StaleShiftGateScreenState extends State<StaleShiftGateScreen> {
+  final _countedCtrl = TextEditingController();
+  final _noteCtrl = TextEditingController();
+  final _dateFmt = DateFormat('HH:mm dd/MM/yyyy', 'vi_VN');
+  bool _loadingExpected = true;
+  double _expectedCash = 0;
+  bool _busy = false;
+  bool _success = false;
+
+  double get _counted =>
+      double.tryParse(_countedCtrl.text.replaceAll('.', '').replaceAll(',', '')) ?? 0;
+  double get _discrepancy => _counted - _expectedCash;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExpected();
+  }
+
+  Future<void> _loadExpected() async {
+    final expected = await widget.shiftService.computeExpectedCash(widget.shift);
+    if (!mounted) return;
+    setState(() {
+      _expectedCash = expected;
+      _loadingExpected = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _countedCtrl.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onConfirmPressed() async {
+    final diff = _discrepancy;
+    final diffColor = diff == 0
+        ? AppColors.success
+        : (diff > 0 ? AppColors.info : AppColors.error);
+    final confirmed = await _confirmMoneyDialog(
+      context,
+      title: 'Xac nhan dong ca cu',
+      amountLabel: 'Tien mat dem duoc thuc te',
+      amountText: '${_vndFmt.format(_counted)}đ',
+      extra: Text(
+        diff == 0
+            ? 'Khớp — không chênh lệch'
+            : diff > 0
+                ? 'Dư ${_vndFmt.format(diff)}đ'
+                : 'Thiếu ${_vndFmt.format(diff.abs())}đ',
+        style: TextStyle(color: diffColor, fontWeight: FontWeight.bold),
+      ),
+    );
+    if (!confirmed || !mounted) return;
+    await _confirm();
+  }
+
+  Future<void> _confirm() async {
+    setState(() => _busy = true);
+    try {
+      await widget.shiftService.closeShift(
+        widget.shift,
+        closingCashCounted: _counted,
+        note: _noteCtrl.text.trim().isEmpty
+            ? 'Tu dong phat hien: ca bi bo do tu phien truoc (thoat app khong dang xuat/dong ca), da bat buoc kiem ca thu cong.'
+            : _noteCtrl.text.trim(),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đóng ca thất bại, vui lòng thử lại')),
+        );
+      }
+      return;
+    }
+    if (mounted) setState(() => _success = true);
+    await Future.delayed(const Duration(milliseconds: 900));
+    // Khong tu dieu huong - man hinh nay se tu dong bi MainShell thay the
+    // (chuyen sang man "can mo ca moi") ngay khi stream watchOpenShift()
+    // nhan biet ca cu vua duoc dong.
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasInput = _countedCtrl.text.isNotEmpty;
+    final diff = _discrepancy;
+    final diffColor = diff == 0
+        ? AppColors.success
+        : (diff > 0 ? AppColors.info : AppColors.error);
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 40),
+                      const SizedBox(height: 12),
+                      const Text('Phát hiện ca làm việc chưa được đóng',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Ca của bạn (${widget.shift.staffName}) mở lúc '
+                        '${_dateFmt.format(widget.shift.openedAt)} vẫn đang ở trạng thái '
+                        'mở — có thể do ứng dụng đã bị thoát trước khi đóng ca. '
+                        'Vui lòng đếm và nhập tiền mặt thực tế trong ngăn kéo để đóng ca này trước khi tiếp tục sử dụng ứng dụng.',
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                      ),
+                      const SizedBox(height: 16),
+                      if (_loadingExpected)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      else ...[
+                        Text(
+                          'Tiền mặt dự kiến trong ngăn kéo: ${_vndFmt.format(_expectedCash)}đ',
+                          style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: _countedCtrl,
+                          readOnly: true,
+                          showCursor: true,
+                          textAlign: TextAlign.right,
+                          decoration: const InputDecoration(
+                            labelText: 'Tiền mặt đếm được thực tế (VNĐ)',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.calculate_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        _MoneyKeypad(
+                          controller: _countedCtrl,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        if (hasInput) ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: diffColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              diff == 0
+                                  ? 'Khớp — không chênh lệch'
+                                  : diff > 0
+                                      ? 'Dư ${_vndFmt.format(diff)}đ'
+                                      : 'Thiếu ${_vndFmt.format(diff.abs())}đ',
+                              style: TextStyle(color: diffColor, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _noteCtrl,
+                          maxLines: 2,
+                          decoration: const InputDecoration(
+                            labelText: 'Ghi chú (không bắt buộc)',
+                            hintText: 'Ví dụ: lý do chênh lệch, lý do thoát app đột ngột...',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: (_busy || !hasInput) ? null : _onConfirmPressed,
+                            icon: _success
+                                ? const Icon(Icons.check_circle_rounded, color: Colors.white)
+                                : (_busy
+                                    ? const SizedBox(
+                                        width: 16, height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      )
+                                    : const Icon(Icons.lock_open_rounded)),
+                            label: Text(_success ? 'Đã đóng ca' : 'Xác nhận đóng ca cũ'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _success ? AppColors.success : AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () => context.read<AuthProvider>().logout(),
+                          child: const Text(
+                            'Đăng xuất',
                             style: TextStyle(color: AppColors.textSecondary),
                           ),
                         ),
@@ -944,7 +1188,7 @@ class _ShiftHistoryList extends StatelessWidget {
         }
         final shifts = snap.data ?? [];
         if (shifts.isEmpty) {
-          return const Text('Chưa có ca nào được đóng',
+          return const Text('Chưa có ca nào được đóng hôm nay',
               style: TextStyle(color: AppColors.textSecondary));
         }
         return Column(

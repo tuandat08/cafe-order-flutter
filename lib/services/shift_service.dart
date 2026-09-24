@@ -17,6 +17,17 @@ class ShiftService {
         .map((snap) => snap.docs.isEmpty ? null : ShiftModel.fromDoc(snap.docs.first));
   }
 
+  /// TOÀN BỘ các ca đang mở của MọI nhân viên (không lọc theo staffId) —
+  /// dùng để phát hiện ca cũ bị bỏ dở từ người khác (vd: staff A mở ca rồi
+  /// thoát app kiểu vượt-tắt, sau đó admin hoặc staff B đăng nhập) — vì ngăn
+  /// kéo tiền là dùng chung, ca cũ phải được đóng trước khi BỬ KỂ AI dùng app tiếp.
+  Stream<List<ShiftModel>> watchAllOpenShifts() {
+    return _col
+        .where('status', isEqualTo: 'open')
+        .snapshots()
+        .map((snap) => snap.docs.map(ShiftModel.fromDoc).toList());
+  }
+
   Future<ShiftModel?> getOpenShift(String staffId) async {
     final snap = await _col
         .where('staffId', isEqualTo: staffId)
@@ -121,10 +132,14 @@ class ShiftService {
     return shift.openingCash + cash;
   }
 
-  /// Lịch sử các ca đã đóng, mới nhất trước.
+  /// Lịch sử các ca đã đóng TRONG NGÀY HÔM NAY (theo giờ thiết bị), mới nhất
+  /// trước — chỉ hiển thị thông tin của ngày hiện tại, không lẫn các ngày cũ.
   Stream<List<ShiftModel>> streamClosedShifts({int limit = 50}) {
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
     return _col
         .where('status', isEqualTo: 'closed')
+        .where('closedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
         .orderBy('closedAt', descending: true)
         .limit(limit)
         .snapshots()

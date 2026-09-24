@@ -1,17 +1,15 @@
 # Graph Report - cafe-order-flutter  (2026-09-22)
 
 ## Corpus Check
-- 45 files · ~54,832 words
-- Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 46 file(s) not represented in the graph (top: .plist 9, .xcconfig 8, (none) 7)
+- cluster-only mode — file stats not available
 
 ## Summary
-- 1062 nodes · 1332 edges · 44 communities (35 shown, 9 thin omitted)
+- 1047 nodes · 1320 edges · 42 communities (35 shown, 7 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 1 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `6a04d2c7`
+- Built from commit: `b9f187f6`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -39,38 +37,36 @@
 - menu_item_model.dart
 - auth_provider.dart
 - GeneratedPluginRegistrant.swift
-- receipt_image_builder.dart
+- auth_service.dart
 - account_model.dart
 - main.dart
 - tables_screen.dart
-- Cafe Admin - Flutter App
-- _OrdersScreenState
+- discount_service.dart
+- package:cloud_firestore/cloud_firestore.dart
 - .application
-- Flutter
+- ios/RunnerTests/RunnerTests.swift
 - GeneratedPluginRegistrant.java
 - FlutterMacOS
 - AppDelegate
 - .awakeFromNib
-- ios/RunnerTests/RunnerTests.swift
+- RunnerTests
 - _TooltipArrowPainter
 - Runner-Bridging-Header.h
 - _MainShellState
 - _RailTooltip
 - _buildTopBar
-- LaunchImage.imageset/README.md
-- sessions_rcw_01b2brcakgnszpufv2tlgjf3_mnt_cafe_order_flutter_ios_runner_generatedpluginregistrant_h
 
 ## God Nodes (most connected - your core abstractions)
 1. `AuthProvider` - 17 edges
 2. `AppDelegate` - 5 edges
 3. `OrderModel` - 5 edges
-4. `Cafe Admin - Flutter App` - 5 edges
-5. `Cài đặt` - 5 edges
-6. `_TableBoardTabState` - 4 edges
-7. `_OrdersScreenState` - 4 edges
-8. `MenuItemModel` - 4 edges
-9. `_LoginScreenState` - 4 edges
-10. `_MainShellState` - 4 edges
+4. `AppDelegate` - 4 edges
+5. `_LoginScreenState` - 4 edges
+6. `MenuItemModel` - 4 edges
+7. `FlutterMacOS` - 4 edges
+8. `_MainShellState` - 4 edges
+9. `_TableBoardTabState` - 4 edges
+10. `_OrdersScreenState` - 4 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `_TableBoardTabState` --references--> `AuthProvider`  [EXTRACTED]
@@ -87,7 +83,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (44 total, 9 thin omitted)
+## Communities (42 total, 7 thin omitted)
 
 ### Community 0 - "orders/orders_screen.dart"
 Cohesion: 0.01
@@ -102,8 +98,8 @@ Cohesion: 0.05
 Nodes (43): ../accounts/accounts_screen.dart, ../dashboard/dashboard_screen.dart, ../discounts/discounts_screen.dart, adminOnly, _buildDesktop, _buildMobile, child, collapsed (+35 more)
 
 ### Community 3 - "app_theme.dart"
-Cohesion: 0.07
-Nodes (29): accent, accentDark, AppColors, AppTheme, background, divider, error, info (+21 more)
+Cohesion: 0.04
+Nodes (42): dart:typed_data, dart:ui, accent, accentDark, AppColors, AppTheme, background, divider (+34 more)
 
 ### Community 4 - "board_tab.dart"
 Cohesion: 0.05
@@ -111,11 +107,11 @@ Nodes (41): _activeOrders, _applyDiscountLocally, _billedTableIds, _boardChip, _
 
 ### Community 5 - "menu_screen.dart"
 Cohesion: 0.05
-Nodes (39): build, _categoryCtrl, color, _confirmDelete, createState, _descCtrl, dispose, _formKey (+31 more)
+Nodes (40): IconData, build, _categoryCtrl, color, _confirmDelete, createState, _descCtrl, dispose (+32 more)
 
 ### Community 6 - "State"
-Cohesion: 0.09
-Nodes (31): _AddProductDialog, _TableBoardTabState, _AddProductDialogState, _DiscountPickerDialogState, _EditOrderDialogState, _HoanThanhBtnState, _InvoiceDialogState, _KDSTabState (+23 more)
+Cohesion: 0.08
+Nodes (35): _AddProductDialog, _TableBoardTabState, _AddProductDialogState, _DiscountPickerDialogState, _EditOrderDialogState, _HoanThanhBtnState, _InvoiceDialogState, _KDSTabState (+27 more)
 
 ### Community 7 - "order_model.dart"
 Cohesion: 0.06
@@ -127,11 +123,11 @@ Nodes (28): dart:async, dart:io, btAddress, btName, clear, connType, instance, i
 
 ### Community 9 - "printer_settings_screen.dart"
 Cohesion: 0.07
-Nodes (29): _btDevices, build, _busy, _connType, createState, dispose, initState, _ipCtrl (+21 more)
+Nodes (28): _btDevices, build, _busy, _connType, createState, dispose, initState, _ipCtrl (+20 more)
 
 ### Community 10 - "reports_screen.dart"
 Cohesion: 0.08
-Nodes (25): Color, IconData, build, _buildContent, color, createState, _DailyBarChart, dailyRevenue (+17 more)
+Nodes (25): Color, build, _buildContent, color, createState, _DailyBarChart, dailyRevenue, fmt (+17 more)
 
 ### Community 11 - "order_service.dart"
 Cohesion: 0.08
@@ -143,7 +139,7 @@ Nodes (25): _Badge, _CartRow, _HeaderActionBtn, _IconSqBtn, _MenuCard, _OrderBlo
 
 ### Community 13 - "dashboard_screen.dart"
 Cohesion: 0.08
-Nodes (24): Color color,, int paidCount, activeCount,, bg, build, color, count, currency, DashboardScreen (+16 more)
+Nodes (24): Color color,, int paidCount, activeCount,, _Badge, bg, build, color, count, currency (+16 more)
 
 ### Community 14 - "StatefulWidget"
 Cohesion: 0.09
@@ -163,27 +159,27 @@ Nodes (17): activeDiscount, capacity, clearedAt, copyWith, currentOrderId, fromD
 
 ### Community 18 - "package:flutter/material.dart"
 Cohesion: 0.13
-Nodes (13): ../../core/theme/app_theme.dart, AccountsScreen, build, _roleColor, build, DiscountsScreen, package:cafe_admin/main.dart, package:flutter/material.dart (+5 more)
+Nodes (13): core/theme/app_theme.dart, AccountsScreen, build, _roleColor, build, DiscountsScreen, package:cafe_admin/main.dart, package:flutter/material.dart (+5 more)
 
 ### Community 19 - "table_service.dart"
-Cohesion: 0.04
-Nodes (43): dart:convert, AuthService, createAccount, _db, hashPassword, login, _salt, streamAccounts (+35 more)
+Cohesion: 0.12
+Nodes (15): clearServiceRequest, clearTable, clearTableDiscount, _db, deleteTable, getAllTables, saveTable, setTableDiscount (+7 more)
 
 ### Community 20 - "menu_item_model.dart"
-Cohesion: 0.12
-Nodes (15): available, category, copyWith, description, fromDoc, id, imageUrl, MenuItemModel (+7 more)
+Cohesion: 0.13
+Nodes (14): available, category, copyWith, description, fromDoc, id, imageUrl, MenuItemModel (+6 more)
 
 ### Community 21 - "auth_provider.dart"
-Cohesion: 0.15
-Nodes (12): AccountModel? get, bool get, _authService, clearError, _currentUser, _error, isAdmin, _isLoading (+4 more)
+Cohesion: 0.14
+Nodes (13): AccountModel? get, bool get, _authService, clearError, _currentUser, _error, isAdmin, _isLoading (+5 more)
 
 ### Community 22 - "GeneratedPluginRegistrant.swift"
 Cohesion: 0.15
 Nodes (12): audioplayers_darwin, cloud_firestore, file_selector_macos, firebase_core, firebase_storage, flutter_tts, Foundation, network_info_plus (+4 more)
 
-### Community 23 - "receipt_image_builder.dart"
-Cohesion: 0.14
-Nodes (13): dart:typed_data, dart:ui, align, bold, buildEscPosBytes, fontSize, left, ReceiptAlign (+5 more)
+### Community 23 - "auth_service.dart"
+Cohesion: 0.15
+Nodes (12): dart:convert, AuthService, createAccount, _db, hashPassword, login, _salt, streamAccounts (+4 more)
 
 ### Community 24 - "account_model.dart"
 Cohesion: 0.17
@@ -197,25 +193,29 @@ Nodes (11): firebase_options.dart, AuthGate, build, CafeAdminApp, initializeDate
 Cohesion: 0.18
 Nodes (10): TableModel, build, onDelete, onEdit, onToggleStatus, table, _TableCard, TablesScreen (+2 more)
 
-### Community 27 - "Cafe Admin - Flutter App"
-Cohesion: 0.17
-Nodes (11): 1. Cài Flutter, 2. Cài dependencies, 3. Cấu hình Firebase cho từng platform, 4. Chạy app, Android, Cafe Admin - Flutter App, Cài đặt, Cấu trúc project (+3 more)
+### Community 27 - "discount_service.dart"
+Cohesion: 0.22
+Nodes (8): _db, delete, DiscountService, incrementUsage, save, streamDiscounts, toggle, ../models/discount_model.dart
 
-### Community 28 - "_OrdersScreenState"
-Cohesion: 0.67
-Nodes (4): _OrdersScreenState, _OrdersScreenState, OrdersScreen, SingleTickerProviderStateMixin
+### Community 28 - "package:cloud_firestore/cloud_firestore.dart"
+Cohesion: 0.22
+Nodes (8): _db, getLatestActiveForOrder, getLatestActiveForTable, InvoiceService, saveInvoice, setPaymentMethod, supersede, package:cloud_firestore/cloud_firestore.dart
 
 ### Community 29 - ".application"
 Cohesion: 0.25
 Nodes (6): Any, FlutterImplicitEngineBridge, FlutterImplicitEngineDelegate, AppDelegate, Bool, UIApplication
 
-### Community 30 - "Flutter"
-Cohesion: 0.40
-Nodes (4): Flutter, FlutterSceneDelegate, SceneDelegate, UIKit
+### Community 30 - "ios/RunnerTests/RunnerTests.swift"
+Cohesion: 0.32
+Nodes (5): Flutter, FlutterSceneDelegate, SceneDelegate, UIKit, XCTest
 
 ### Community 31 - "GeneratedPluginRegistrant.java"
 Cohesion: 0.38
 Nodes (5): GeneratedPluginRegistrant, androidx.annotation.Keep, io.flutter.embedding.engine.FlutterEngine, log, nonnull
+
+### Community 32 - "FlutterMacOS"
+Cohesion: 0.38
+Nodes (3): Cocoa, FlutterMacOS, RunnerTests
 
 ### Community 33 - "AppDelegate"
 Cohesion: 0.47
@@ -225,26 +225,22 @@ Nodes (4): FlutterAppDelegate, AppDelegate, Bool, NSApplication
 Cohesion: 0.40
 Nodes (4): FlutterPluginRegistry, RegisterGeneratedPlugins(), MainFlutterWindow, NSWindow
 
-### Community 35 - "ios/RunnerTests/RunnerTests.swift"
-Cohesion: 0.29
-Nodes (4): RunnerTests, RunnerTests, XCTest, XCTestCase
-
 ## Knowledge Gaps
-- **761 isolated node(s):** `_orderService`, `_menuService`, `_tableService`, `_discountService`, `_invoiceService` (+756 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 817 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **9 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **752 isolated node(s):** `activeDiscount`, `activeDiscountId`, `_activeOrders`, `_AddCartItem`, `_addItem` (+747 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 805 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **7 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `AuthProvider` connect `AuthProvider` to `orders/orders_screen.dart`, `main_shell.dart`, `board_tab.dart`, `State`, `_MainShellState`, `auth_provider.dart`, `main.dart`?**
-  _High betweenness centrality (0.030) - this node is a cross-community bridge._
+  _High betweenness centrality (0.034) - this node is a cross-community bridge._
 - **Why does `OrderModel` connect `order_service.dart` to `orders/orders_screen.dart`, `Claude outputs/orders_screen.dart`, `dashboard_screen.dart`, `order_model.dart`?**
-  _High betweenness centrality (0.024) - this node is a cross-community bridge._
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
 - **Why does `MenuItemModel` connect `menu_item_model.dart` to `orders/orders_screen.dart`, `Claude outputs/orders_screen.dart`, `menu_screen.dart`?**
-  _High betweenness centrality (0.011) - this node is a cross-community bridge._
-- **What connects `_orderService`, `_menuService`, `_tableService` to the rest of the system?**
-  _761 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _High betweenness centrality (0.008) - this node is a cross-community bridge._
+- **What connects `activeDiscount`, `activeDiscountId`, `_activeOrders` to the rest of the system?**
+  _752 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `orders/orders_screen.dart` be split into smaller, more focused modules?**
   _Cohesion score 0.009950248756218905 - nodes in this community are weakly interconnected._
 - **Should `Claude outputs/orders_screen.dart` be split into smaller, more focused modules?**
