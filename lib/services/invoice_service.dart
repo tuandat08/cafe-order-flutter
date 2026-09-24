@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firestore_write.dart';
 
 /// Dịch vụ hóa đơn — port từ web invoiceService.
 class InvoiceService {
@@ -83,10 +84,10 @@ class InvoiceService {
 
   Future<void> supersede(String invoiceId) async {
     try {
-      await _db.collection('invoices').doc(invoiceId).update({
+      await writeLocal(_db.collection('invoices').doc(invoiceId).update({
         'status': 'superseded',
         'supersededAt': FieldValue.serverTimestamp(),
-      });
+      }));
     } catch (_) {}
   }
 
@@ -126,10 +127,11 @@ class InvoiceService {
       };
       String resultId;
       if (invoiceId != null && invoiceId.isNotEmpty) {
-        await _db.collection('invoices').doc(invoiceId).set(toSave);
+        await writeLocal(_db.collection('invoices').doc(invoiceId).set(toSave));
         resultId = invoiceId;
       } else {
-        final ref = await _db.collection('invoices').add(toSave);
+        final ref = _db.collection('invoices').doc();
+        await writeLocal(ref.set(toSave));
         resultId = ref.id;
       }
       if (isPrint2 && previousInvoiceId != null) {
@@ -158,7 +160,7 @@ class InvoiceService {
         .where('status', isEqualTo: 'active')
         .get();
     if (snap.docs.isEmpty) return;
-    await _db.collection('invoices').doc(snap.docs.first.id).update({
+    await writeLocal(_db.collection('invoices').doc(snap.docs.first.id).update({
       'paymentMethod': method,
       'paidAt': Timestamp.fromDate(DateTime.now()),
       if (staffId != null) 'paidById': staffId,
@@ -166,7 +168,7 @@ class InvoiceService {
       if (cashReceived != null) 'cashReceived': cashReceived,
       if (cashReceived != null) 'changeGiven': cashReceived - total,
       if (method == 'Chuyển khoản') 'transferConfirmed': transferConfirmed,
-    });
+    }));
   }
 
   /// Cập nhật phương thức thanh toán cho hóa đơn active của đơn.
@@ -178,7 +180,7 @@ class InvoiceService {
           .where('status', isEqualTo: 'active')
           .get();
       if (snap.docs.isEmpty) return;
-      await _db.collection('invoices').doc(snap.docs.first.id).update({'paymentMethod': paymentMethod});
+      await writeLocal(_db.collection('invoices').doc(snap.docs.first.id).update({'paymentMethod': paymentMethod}));
     } catch (_) {}
   }
 }

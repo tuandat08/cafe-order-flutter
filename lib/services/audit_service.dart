@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'firestore_write.dart';
 import '../models/account_model.dart';
 
 /// Nhật ký thao tác nhạy cảm về tiền (hủy/bớt món, xóa đơn, in bill không lưu
@@ -25,7 +26,7 @@ class AuditService {
     Map<String, dynamic>? details,
   }) async {
     try {
-      await _db.collection('auditLogs').add({
+      await writeLocal(_db.collection('auditLogs').doc().set({
         'action': action,
         'createdAt': FieldValue.serverTimestamp(),
         'staffId': staff?.id,
@@ -41,7 +42,7 @@ class AuditService {
         if (amountBefore != null && amountAfter != null)
           'amountDiff': amountAfter - amountBefore,
         if (details != null) ...details,
-      });
+      }));
     } catch (e) {
       // Không chặn thao tác chính nếu ghi nhật ký lỗi (vd: mất mạng tạm thời —
       // Firestore vẫn tự đồng bộ lại khi có mạng).

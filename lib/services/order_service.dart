@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firestore_write.dart';
 import 'floor_plan_service.dart' show kActiveOrderStatuses;
 import '../models/order_model.dart';
 
@@ -71,10 +72,10 @@ class OrderService {
   }
 
   Future<void> updateStatus(String orderId, String status) async {
-    await _db.collection('orders').doc(orderId).update({
+    await writeLocal(_db.collection('orders').doc(orderId).update({
       'status': status,
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }));
   }
 
   // Tìm document bàn theo id (thử cả "2" lẫn "02") — giống web _resolveTableRef
@@ -102,20 +103,20 @@ class OrderService {
   }) async {
     final clearedAt = Timestamp.fromDate(DateTime.now());
     // 1. Đóng tất cả đơn
-    await Future.wait(orderIds.map((id) =>
-        _db.collection('orders').doc(id).update({'status': 'closed'})));
+    await writeLocal(Future.wait(orderIds.map((id) =>
+        _db.collection('orders').doc(id).update({'status': 'closed'}))));
     // 2. Cập nhật bàn: available + clearedAt (+ clearReason)
     final tableRef = await _resolveTableRef(tableId);
     if (tableRef != null) {
-      await tableRef.update({
+      await writeLocal(tableRef.update({
         'status': 'available',
         'clearedAt': clearedAt,
         if (clearReason != null) 'clearReason': clearReason,
-      });
+      }));
     }
     // 3. Dọn bàn không xuất bill → ghi clearLogs
     if (clearReason != null) {
-      await _db.collection('clearLogs').add({
+      await writeLocal(_db.collection('clearLogs').doc().set({
         'tableId': tableId,
         'reason': clearReason,
         'clearedAt': clearedAt,
@@ -127,7 +128,7 @@ class OrderService {
         if (staffRole != null) 'staffRole': staffRole,
         if (approvedById != null) 'approvedById': approvedById,
         if (approvedByName != null) 'approvedByName': approvedByName,
-      });
+      }));
     }
   }
 
@@ -135,32 +136,32 @@ class OrderService {
   Future<void> updateTableLastBilledAt(String tableId) async {
     final tableRef = await _resolveTableRef(tableId);
     if (tableRef != null) {
-      await tableRef.update({'lastBilledAt': Timestamp.fromDate(DateTime.now())});
+      await writeLocal(tableRef.update({'lastBilledAt': Timestamp.fromDate(DateTime.now())}));
     }
   }
 
   // Áp/gỡ mã giảm giá ở cấp ĐƠN (dùng cho đơn mang về — mỗi đơn riêng)
   Future<void> setOrderDiscount(String orderId, {String? code, double amount = 0}) async {
-    await _db.collection('orders').doc(orderId).update({
+    await writeLocal(_db.collection('orders').doc(orderId).update({
       'discountCode': code,
       'discountAmount': amount,
-    });
+    }));
   }
 
   Future<void> deleteOrder(String orderId) async {
-    await _db.collection('orders').doc(orderId).delete();
+    await writeLocal(_db.collection('orders').doc(orderId).delete());
   }
 
   // Cập nhật danh sách món + tổng tiền (giống web orderService.updateOrderItems)
   Future<void> updateOrderItems(
       String orderId, List<OrderItem> items,
       {required double vnd, required double usd}) async {
-    await _db.collection('orders').doc(orderId).update({
+    await writeLocal(_db.collection('orders').doc(orderId).update({
       'items': items.map((i) => i.toMap()).toList(),
       'totalAmount': {'vnd': vnd, 'usd': usd},
       'totalPrice': vnd,
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }));
   }
 
   Future<Map<String, dynamic>> getTodayStats() async {
@@ -183,8 +184,9 @@ class OrderService {
     };
   }
 
-  /// Tạo đơn hàng và chờ server xác nhận ghi thành công.
-  /// Nếu Firestore Security Rules block write → throw FirebaseException.
+  /// Tạo đơn hàng. Có mạng: lỗi Security Rules được ném ra ngay (writeLocal).
+  /// Mất mạng: đơn được lưu trên máy và tự gửi lên khi có mạng lại (trước đây
+  /// chờ máy chủ xác nhận → treo, rồi còn XÓA đơn vừa tạo khi không kết nối được).
   Future<String> createOrder({
     required String tableId,
     required List<OrderItem> items,
@@ -195,7 +197,8 @@ class OrderService {
     final usd = double.parse((total / 26000).toStringAsFixed(2));
     // Ghi cả 2 schema (web totalAmount/paymentMethod + Flutter totalPrice/paymentType)
     // để web và Flutter đều đọc đúng
-    final ref = await _db.collection('orders').add({
+    final ref = _db.collection('orders').doc();
+    await writeLocal(ref.set({
       'tableId': tableId,
       'items': items.map((i) => i.toMap()).toList(),
       'status': 'pending',
@@ -206,16 +209,7 @@ class OrderService {
       'source': 'staff_add',
       if (note != null && note.isNotEmpty) 'note': note,
       'createdAt': FieldValue.serverTimestamp(),
-    });
-    // Xác nhận từ server — phát hiện lỗi Security Rules ngay lập tức
-    try {
-      await ref.get(const GetOptions(source: Source.server));
-      debugPrint('[OrderService] createOrder OK: ${ref.id}');
-    } catch (e) {
-      debugPrint('[OrderService] createOrder server error: $e');
-      await ref.delete().catchError((_) {});
-      rethrow;
-    }
+    }));
     return ref.id;
   }
 }

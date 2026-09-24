@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firestore_write.dart';
 import '../models/shift_model.dart';
 
 /// Dịch vụ kiểm ca / đóng ca — đối chiếu tiền mặt thực tế trong ngăn kéo với
@@ -136,14 +137,14 @@ class ShiftService {
     required String staffId,
     required String staffName,
   }) async {
-    await _moves(shiftId).add({
+    await writeLocal(_moves(shiftId).doc().set({
       'type': type,
       'amount': amount,
       'reason': reason,
       'staffId': staffId,
       'staffName': staffName,
       'createdAt': Timestamp.fromDate(DateTime.now()),
-    });
+    }));
   }
 
   Stream<List<CashMovement>> watchCashMovements(String shiftId) {
@@ -178,7 +179,7 @@ class ShiftService {
   }) async {
     final revenue = await _revenueSince(shift.openedAt);
     final moves = await _movementTotals(shift.id);
-    await _col.doc(shift.id).update({
+    await writeLocal(_col.doc(shift.id).update({
       'cashIn': moves.cashIn,
       'cashOut': moves.cashOut,
       'closedAt': FieldValue.serverTimestamp(),
@@ -189,7 +190,7 @@ class ShiftService {
       'invoiceCount': revenue['invoiceCount'],
       if (note != null && note.isNotEmpty) 'note': note,
       'status': 'closed',
-    });
+    }));
   }
 
   /// Tiền mặt dự kiến trong ngăn kéo NGAY LÚC NÀY nếu đóng ca (đầu ca + doanh

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firestore_write.dart';
 import 'package:uuid/uuid.dart';
 import '../models/table_model.dart';
 
@@ -24,19 +25,19 @@ class TableService {
   }
 
   Future<void> saveTable(TableModel table) async {
-    await _db.collection('tables').doc(table.id).set(table.toMap());
+    await writeLocal(_db.collection('tables').doc(table.id).set(table.toMap()));
   }
 
   Future<void> updateTable(String id, Map<String, dynamic> data) async {
-    await _db.collection('tables').doc(id).update(data);
+    await writeLocal(_db.collection('tables').doc(id).update(data));
   }
 
   Future<void> deleteTable(String id) async {
-    await _db.collection('tables').doc(id).delete();
+    await writeLocal(_db.collection('tables').doc(id).delete());
   }
 
   Future<void> updateStatus(String id, String status) async {
-    await _db.collection('tables').doc(id).update({'status': status});
+    await writeLocal(_db.collection('tables').doc(id).update({'status': status}));
   }
 
   // Ghi/xoá discount lên table doc (giống web tableService.setTableDiscount)
@@ -50,17 +51,17 @@ class TableService {
       final ref = _db.collection('tables').doc(id);
       final snap = await ref.get();
       if (snap.exists) {
-        await ref.update({'activeDiscount': discount});
+        await writeLocal(ref.update({'activeDiscount': discount}));
         return;
       }
     }
     // Không tìm thấy doc bàn nào (vd bàn "Mang về" do POS tạo, chưa có doc tables).
     // Nếu đang áp mã → tạo doc để lưu discount; gỡ mã (null) thì bỏ qua.
     if (discount != null) {
-      await _db.collection('tables').doc(tt).set({
+      await writeLocal(_db.collection('tables').doc(tt).set({
         'name': tt,
         'activeDiscount': discount,
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)));
     }
   }
 
@@ -76,7 +77,7 @@ class TableService {
       final ref = _db.collection('tables').doc(id);
       final snap = await ref.get();
       if (snap.exists) {
-        await ref.update({'serviceRequest': null});
+        await writeLocal(ref.update({'serviceRequest': null}));
         return;
       }
     }
@@ -92,15 +93,15 @@ class TableService {
       final ref = _db.collection('tables').doc(id);
       final snap = await ref.get();
       if (snap.exists) {
-        await ref.update({'lastBilledAt': Timestamp.fromDate(DateTime.now())});
+        await writeLocal(ref.update({'lastBilledAt': Timestamp.fromDate(DateTime.now())}));
         return;
       }
     }
     // Bàn không có doc (vd "Mang về") → tạo doc để lưu mốc xuất bill
-    await _db.collection('tables').doc(tt).set({
+    await writeLocal(_db.collection('tables').doc(tt).set({
       'name': tt,
       'lastBilledAt': Timestamp.fromDate(DateTime.now()),
-    }, SetOptions(merge: true));
+    }, SetOptions(merge: true)));
   }
 
   // Dọn bàn (giống web tableService.clearTable):
@@ -122,21 +123,21 @@ class TableService {
           for (final d in cart.docs) {
             batch.delete(d.reference);
           }
-          await batch.commit();
+          await writeLocal(batch.commit());
         }
         // Reset phiên: sessionToken=null làm QR cũ không resolve được nữa
-        await ref.update({
+        await writeLocal(ref.update({
           'activeDiscount': null,
           'sessionId': const Uuid().v4(),
           'sessionToken': null,
-        });
+        }));
         return;
       }
     }
     // Bàn "Mang về" (không có doc) — chỉ cần đảm bảo activeDiscount được gỡ
-    await _db.collection('tables').doc(tt).set({
+    await writeLocal(_db.collection('tables').doc(tt).set({
       'name': tt,
       'activeDiscount': null,
-    }, SetOptions(merge: true));
+    }, SetOptions(merge: true)));
   }
 }
