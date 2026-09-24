@@ -156,7 +156,7 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     // Không có stream (không xác định được currentUser ở initState) — trường
     // hợp an toàn dự phòng, không nên xảy ra trên thực tế.
-    if (_openShiftStream == null) return _buildShell();
+    if (_allOpenShiftsStream == null) return _buildShell();
 
     // Đang trong lúc đóng ca để đăng xuất → CHỦ ĐỘNG không xét stream ca mở
     // nữa, luôn hiện màn hình chờ đơn giản. Đây là điểm sửa gốc rễ: nếu vẫn
@@ -170,36 +170,45 @@ class _MainShellState extends State<MainShell> {
     }
 
     final user = context.read<AuthProvider>().currentUser!;
-    return StreamBuilder<ShiftModel?>(
-      stream: _openShiftStream,
+    return StreamBuilder<List<ShiftModel>>(
+      stream: _allOpenShiftsStream,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
-        final openShift = snap.data;
+        final allOpen = snap.data ?? const <ShiftModel>[];
+        final now = DateTime.now();
+        bool isStaleShift(ShiftModel s) {
+          final o = s.openedAt;
+          return o.year != now.year || o.month != now.month || o.day != now.day;
+        }
 
-        // Bước 1 — ÁP DỤNG CHO MỌI TÀI KHOẢN đã từng mở ca (kể cả bếp, nếu
-        // có): nếu ca đang mở là từ một ngày trước đó, gần như chắc chắn do app bị
-        // thoát (vượt-tắt/force-kill) mà không đăng xuất hay đóng ca. Bắt buộc kiểm
-        // ca thủ công (đếm tiền thật) trước khi cho vào app — không tự động đóng
-        // ngầm, không cho bỏ qua, không phân biệt vai trò tài khoản.
-        if (openShift != null) {
-          final now = DateTime.now();
-          final opened = openShift.openedAt;
-          final isStale = opened.year != now.year ||
-              opened.month != now.month ||
-              opened.day != now.day;
-          if (isStale) {
-            return StaleShiftGateScreen(
-              shift: openShift,
-              shiftService: _shiftService,
-            );
+        // Bước 1 — ÁP DỤNG CHO MỌI TÀI KHOẢN ĐANG ĐĂNG NHẬP, KHÔNG PHÂN BIỆT ĐÓ
+        // CÓ PHẢI NGƯờI Đã Mở CA ĐÓ HAY KHÔNG: nếu BẤT KỲ ca nào (của bất kỳ
+        // nhân viên nào) đang mở từ một ngày trước đó, gần như chắc chắn người đó đã
+        // thoát app kiểu vượt-tắt (không đăng xuất hay đóng ca). Vì ngăn kéo tiền là
+        // dùng chung, Dù admin hay một staff KHÁC đăng nhập vào sau đó cũng phải bị
+        // chặn lại và bắt buộc kiểm ca thủ công (đếm tiền thật) cho ca cũ đó trước khi
+        // được dùng app tiếp — không tự động đóng ngầm, không cho bỏ qua.
+        ShiftModel? staleShift;
+        for (final s in allOpen) {
+          if (isStaleShift(s)) {
+            staleShift = s;
+            break;
           }
+        }
+        if (staleShift != null) {
+          return StaleShiftGateScreen(
+            shift: staleShift,
+            shiftService: _shiftService,
+          );
         }
 
         // Bước 2 — chỉ áp dụng cho tài khoản bắt buộc phải mở ca (không phải bếp):
-        // chưa mở ca — chặn toàn bộ app, bắt buộc mở ca trước.
-        if (_requiresShift && openShift == null) {
+        // nếu chính tài khoản đang đăng nhập chưa có ca mở nào (trong danh sách không
+        // còn ca stale nào ở trên) — chặn toàn bộ app, bắt buộc mở ca trước.
+        final hasOwnOpenShift = allOpen.any((s) => s.staffId == user.id);
+        if (_requiresShift && !hasOwnOpenShift) {
           return OpenShiftGateScreen(
             staffId: user.id,
             staffName: user.fullName,
