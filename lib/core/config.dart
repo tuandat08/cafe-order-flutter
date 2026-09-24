@@ -9,4 +9,4 @@ const String kAuthApiUrl = String.fromEnvironment(
 /// kết nối) thì đăng nhập kiểu cũ (đọc bảng accounts ngay trên máy) để quán không
 /// bị gián đoạn. Chỉ dùng được khi Firestore rules còn mở — đặt về false trước
 /// khi bật rules mới.
-const bool kLegacyAuthFallback = true;
+const bool kLegacyAuthFallback = false;
