@@ -7,6 +7,7 @@ import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/main/main_shell.dart';
+import 'widgets/offline_banner.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +32,8 @@ class CafeAdminApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         home: const AuthGate(),
+        // Dải báo mất kết nối hiện trên MỌI màn hình (kể cả đăng nhập, mở ca).
+        builder: (context, child) => OfflineBanner(child: child ?? const SizedBox()),
       ),
     );
   }
