@@ -1455,7 +1455,7 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
   double get _amount =>
       double.tryParse(_amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
 
-  static const _outPresets = ['Mua đá', 'Mua sữa / nguyên liệu', 'Trả tiền ship', 'Tạm ứng lương'];
+  static const _outPresets = ['Mua đá', 'Mua sữa / nguyên liệu', 'Trả tiền ship'];
   static const _inPresets = ['Nộp thêm tiền lẻ', 'Chủ quán đưa thêm'];
 
   @override
