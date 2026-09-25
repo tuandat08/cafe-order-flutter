@@ -1258,7 +1258,7 @@ class _KDSTabState extends State<_KDSTab> {
       setState(() {});
       if (_audioUnlocked) {
         for (final o in _activeOrders) {
-          if (o.status == 'pending' && _elapsedMinutes(o.createdAt) >= 10) {
+          if ((o.status == 'pending' || o.status == 'preparing') && _elapsedMinutes(o.createdAt) >= 10) {
             _playWarning('Chú ý, bàn số ${o.tableId} đang bị trễ món.', asset: 'sounds/late_order.mp3');
             break;
           }
@@ -2408,12 +2408,13 @@ class _OrderBlock extends StatelessWidget {
     final elapsed = _elapsedMinutes(order.createdAt);
     final tc = _timerColor(elapsed);
 
-    // Status badge: giống web — CHỈ pending = 'đang chờ', mọi status khác = 'hoàn thành'
-    // Web: order.status === 'pending' ? 'đang chờ' : 'hoàn thành'
+    // Status badge: pending = 'đang chờ' · preparing = 'đang pha' · còn lại = 'hoàn thành'
+    // (khách xem được bước này trên menu web: Đã nhận → Đang pha → Đã xong)
     final isPending   = order.status == 'pending';
-    final statusLabel = isPending ? 'đang chờ' : 'hoàn thành';
-    final statusBg    = isPending ? const Color(0xFFFEF3C7) : const Color(0xFFD1FAE5);
-    final statusText  = isPending ? const Color(0xFFB45309) : const Color(0xFF065F46);
+    final isPreparing = order.status == 'preparing';
+    final statusLabel = isPending ? 'đang chờ' : isPreparing ? 'đang pha' : 'hoàn thành';
+    final statusBg    = isPending ? const Color(0xFFFEF3C7) : isPreparing ? const Color(0xFFDBEAFE) : const Color(0xFFD1FAE5);
+    final statusText  = isPending ? const Color(0xFFB45309) : isPreparing ? const Color(0xFF1D4ED8) : const Color(0xFF065F46);
 
     // Payment badge: giống web — dùng paymentMethod === 'counter'
     // Web-created: paymentMethod = 'counter' | khác. Flutter cũ: fallback paymentType != 'PREPAID'
@@ -2581,9 +2582,9 @@ class _OrderBlock extends StatelessWidget {
           ]),
         ),
 
-        // Nút "Hoàn thành" — giống web: CHỈ hiện khi status === 'pending'
-        // Web: order.status === 'pending' && <button onClick={() => handleUpdateStatus(order.id, 'completed')}>Hoàn thành</button>
-        if (order.status == 'pending') ...[
+        // Đơn mới: nút "Bắt đầu pha" (pending → preparing); đang pha: "Hoàn thành"
+        // (preparing → completed). Đơn cũ đang 'pending' vẫn bấm được từng bước.
+        if (order.status == 'pending' || order.status == 'preparing') ...[
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
@@ -2608,11 +2609,11 @@ class _HoanThanhBtn extends StatefulWidget {
 class _HoanThanhBtnState extends State<_HoanThanhBtn> {
   bool _loading = false;
 
-  // Giống web 100%: handleUpdateStatus(order.id, 'completed')
-  String get _nextStatus => 'completed';
+  bool get _isPending => widget.order.status == 'pending';
 
-  // Giống web: label luôn là "Hoàn thành"
-  String get _btnLabel => 'Hoàn thành';
+  String get _nextStatus => _isPending ? 'preparing' : 'completed';
+
+  String get _btnLabel => _isPending ? 'Bắt đầu pha' : 'Hoàn thành';
 
   Future<void> _tap() async {
     setState(() => _loading = true);
@@ -2630,14 +2631,15 @@ class _HoanThanhBtnState extends State<_HoanThanhBtn> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFF059669),          // emerald-600
+          // Bắt đầu pha: xanh dương · Hoàn thành: xanh lá (emerald-600)
+          color: _isPending ? const Color(0xFF2563EB) : const Color(0xFF059669),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           if (_loading)
             const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
           else
-            const Icon(Icons.check_rounded, size: 14, color: Colors.white),
+            Icon(_isPending ? Icons.local_cafe_rounded : Icons.check_rounded, size: 14, color: Colors.white),
           const SizedBox(width: 6),
           Text(_btnLabel, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
         ]),
