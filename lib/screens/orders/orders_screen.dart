@@ -617,14 +617,21 @@ class _POSTabState extends State<_POSTab> {
                     }
                   }
                   final occupied = _occupiedTableIds.contains(_tableId);
-                  final service = tables.where((t) => t.id == _tableId).firstOrNull?.serviceRequest != null;
+                  final curTable = tables.where((t) => t.id == _tableId).firstOrNull;
+                  final service = curTable?.serviceRequest != null;
+                  final bill = curTable?.isBillRequest ?? false;
                   // Nền + viền + chữ của chip cũng đổi theo trạng thái (không chỉ chấm tròn),
                   // giống hệt 3 trạng thái ở dialog "Chọn bàn": xám trống / xanh đang phục vụ / vàng gọi phục vụ.
                   final Color dot;
                   final Color chipBg;
                   final Color chipBorder;
                   final Color chipText;
-                  if (service) {
+                  if (bill) {
+                    dot = const Color(0xFF2563EB);
+                    chipBg = const Color(0xFFDBEAFE);
+                    chipBorder = const Color(0xFF2563EB);
+                    chipText = const Color(0xFF1D4ED8);
+                  } else if (service) {
                     dot = const Color(0xFFF59E0B);
                     chipBg = const Color(0xFFFEF3C7);
                     chipBorder = const Color(0xFFF59E0B);
@@ -953,6 +960,8 @@ class _TablePickerDialogState extends State<_TablePickerDialog> {
               _legendDot(AppColors.success, 'Đang phục vụ'),
               const SizedBox(width: 14),
               _legendDot(const Color(0xFFF59E0B), 'Gọi phục vụ'),
+              const SizedBox(width: 14),
+              _legendDot(const Color(0xFF2563EB), 'Gọi tính tiền'),
             ]),
             const SizedBox(height: 12),
             Flexible(
@@ -974,11 +983,16 @@ class _TablePickerDialogState extends State<_TablePickerDialog> {
                         final t = filtered[i];
                         final occupied = widget.occupiedIds.contains(t.id);
                         final service = t.serviceRequest != null;
+                        final bill = t.isBillRequest;
                         final selected = t.id == widget.selectedId;
-                        final Color dot = service
+                        final Color dot = bill
+                            ? const Color(0xFF2563EB) // gọi tính tiền — xanh dương
+                            : service
                             ? const Color(0xFFF59E0B) // gọi phục vụ — vàng
                             : (occupied ? AppColors.success : const Color(0xFF94A3B8)); // đang phục vụ — xanh / trống — xám
-                        final Color tileBg = service
+                        final Color tileBg = bill
+                            ? const Color(0xFFDBEAFE) // nền xanh dương nhạt — gọi tính tiền
+                            : service
                             ? const Color(0xFFFEF3C7) // nền vàng nhạt — gọi phục vụ
                             : (occupied
                                 ? const Color(0xFFDCFCE7) // nền xanh nhạt — đang phục vụ
@@ -5006,6 +5020,9 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         child: Column(children: [
           _boardFilterBar(counts),
           if (!billedView) _boardSummaryBar(cntDatMon, cntCho, pendingPaymentTotal),
+          // Bàn đang gọi (phục vụ / tính tiền) nhưng CHƯA có đơn → không có thẻ bàn
+          // nào để hiện banner, nên liệt kê riêng ở đây để nhân viên không bỏ sót.
+          if (!billedView) ..._noOrderServiceBanners(groupBase.values.toSet()),
           const Divider(height: 1),
           Expanded(
             child: billedView
@@ -5077,6 +5094,45 @@ class _TableBoardTabState extends State<_TableBoardTab> {
                 : _boardDetail(selKey, groupBase[selKey]!, grouped[selKey]!)),
       ),
     ]);
+  }
+
+  List<Widget> _noOrderServiceBanners(Set<String> tablesWithOrders) {
+    final calling = _tables
+        .where((t) => t.serviceRequest != null && !tablesWithOrders.contains(_canonTableId(t.id)))
+        .toList()
+      ..sort((a, b) => a.serviceRequest!.compareTo(b.serviceRequest!));
+    return [
+      for (final t in calling)
+        Container(
+          margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: t.isBillRequest ? const Color(0xFFEFF6FF) : const Color(0xFFFFFBEB),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: t.isBillRequest ? const Color(0xFF93C5FD) : const Color(0xFFFCD34D), width: 1.5),
+          ),
+          child: Row(children: [
+            Icon(t.isBillRequest ? Icons.receipt_long_rounded : Icons.notifications_active,
+                size: 16, color: t.isBillRequest ? const Color(0xFF1D4ED8) : const Color(0xFFB45309)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('Bàn ${t.id} — ${t.serviceRequestLabel} (chưa có đơn)',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                      color: t.isBillRequest ? const Color(0xFF1D4ED8) : const Color(0xFFB45309))),
+            ),
+            GestureDetector(
+              onTap: () => _handleClearServiceRequest(t.id),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                    color: t.isBillRequest ? const Color(0xFF2563EB) : const Color(0xFFFBBF24),
+                    borderRadius: BorderRadius.circular(8)),
+                child: const Text('Đã xử lý', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
+              ),
+            ),
+          ]),
+        ),
+    ];
   }
 
   // Thanh tổng quan nhanh — số bàn đang phục vụ + tổng tiền dự kiến chờ thanh toán,
@@ -5250,7 +5306,10 @@ class _TableBoardTabState extends State<_TableBoardTab> {
             else if (billed)
               _boardChip('Chờ đóng bàn', const Color(0xFFFFEDD5), const Color(0xFFC2410C)),
             _boardChip('$itemCount món', const Color(0xFFF1F5F9), const Color(0xFF475569)),
-            if (service) _boardChip(_findTable(base)?.serviceRequestLabel ?? 'Gọi phục vụ', const Color(0xFFFEF3C7), const Color(0xFFB45309)),
+            if (service)
+              (_findTable(base)?.isBillRequest ?? false)
+                  ? _boardChip(_findTable(base)!.serviceRequestLabel, const Color(0xFFDBEAFE), const Color(0xFF1D4ED8))
+                  : _boardChip('Gọi phục vụ', const Color(0xFFFEF3C7), const Color(0xFFB45309)),
           ]),
         ]),
       ),
@@ -5444,6 +5503,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
     final allDone = orders.every((o) => _isDone(o.status));
     final billed = takeaway ? _isTakeawayBilled(key, orders) : _isBilled(base, orders);
     final service = !takeaway && _hasServiceRequest(base);
+    final bill = service && (_findTable(base)?.isBillRequest ?? false);
     final isClearing = _clearingTableIds.contains(key);
 
     return Column(children: [
@@ -5486,25 +5546,27 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         ]),
       ),
       const Divider(height: 1),
-      // Banner gọi phục vụ
+      // Banner gọi phục vụ (vàng) / gọi tính tiền (xanh dương)
       if (service)
         Container(
           margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFFDE68A)),
+            color: bill ? const Color(0xFFEFF6FF) : const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: bill ? const Color(0xFF93C5FD) : const Color(0xFFFDE68A)),
           ),
           child: Row(children: [
-            const Icon(Icons.notifications_active, size: 15, color: Color(0xFFB45309)),
+            Icon(bill ? Icons.receipt_long_rounded : Icons.notifications_active, size: 15,
+                color: bill ? const Color(0xFF1D4ED8) : const Color(0xFFB45309)),
             const SizedBox(width: 6),
             Expanded(child: Text(_findTable(base)?.serviceRequestMessage ?? 'Khách đang gọi phục vụ!',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFB45309)))),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                    color: bill ? const Color(0xFF1D4ED8) : const Color(0xFFB45309)))),
             GestureDetector(
               onTap: () => _handleClearServiceRequest(base),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: const Color(0xFFFBBF24), borderRadius: BorderRadius.circular(8)),
+                decoration: BoxDecoration(color: bill ? const Color(0xFF2563EB) : const Color(0xFFFBBF24), borderRadius: BorderRadius.circular(8)),
                 child: const Text('Đã xử lý', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
               ),
             ),

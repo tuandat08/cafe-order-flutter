@@ -97,6 +97,10 @@ class FloorTable {
   final String name;
   final String status; // available | occupied | reserved
   final bool hasServiceRequest;
+  /// 'service' | 'bill' — khách gọi phục vụ hay gọi tính tiền (xem TableModel).
+  final String? serviceRequestType;
+  /// 'cash' | 'transfer' — hình thức khách muốn trả khi gọi tính tiền.
+  final String? serviceRequestPayment;
   final int? layoutFloor; // 1 | 2 | null (chưa xếp vị trí)
   final double? layoutX, layoutY; // %
   final double? layoutSize; // px
@@ -108,6 +112,8 @@ class FloorTable {
     required this.name,
     required this.status,
     required this.hasServiceRequest,
+    this.serviceRequestType,
+    this.serviceRequestPayment,
     this.layoutFloor,
     this.layoutX,
     this.layoutY,
@@ -118,6 +124,15 @@ class FloorTable {
 
   bool get isPlaced => layoutFloor == 1 || layoutFloor == 2;
 
+  bool get isBillRequest => hasServiceRequest && serviceRequestType == 'bill';
+
+  /// Nhãn ngắn dưới tên bàn trên sơ đồ khi khách gọi tính tiền.
+  String get billBadge => switch (serviceRequestPayment) {
+        'transfer' => 'Tính tiền · CK',
+        'cash' => 'Tính tiền · TM',
+        _ => 'Tính tiền',
+      };
+
   factory FloorTable.fromDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     double? dOrNull(dynamic v) => v is num ? v.toDouble() : null;
@@ -127,6 +142,8 @@ class FloorTable {
       name: data['name']?.toString() ?? 'Bàn ${doc.id}',
       status: data['status']?.toString() ?? 'available',
       hasServiceRequest: data['serviceRequest'] != null,
+      serviceRequestType: data['serviceRequestType'] as String?,
+      serviceRequestPayment: data['serviceRequestPayment'] as String?,
       layoutFloor: iOrNull(data['layoutFloor']),
       layoutX: dOrNull(data['layoutX']),
       layoutY: dOrNull(data['layoutY']),

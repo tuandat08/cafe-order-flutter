@@ -81,11 +81,15 @@ class _TableDot {
 const kStatusGray = Color(0xFF94A3B8);   // trống
 const kStatusGreen = Color(0xFF16A34A);  // đang phục vụ (AppColors.success)
 const kStatusAmber = Color(0xFFF59E0B);  // gọi phục vụ
+const kStatusBlue = Color(0xFF2563EB);   // gọi tính tiền
 
 _TableDot _dotColor(FloorTable t, bool occupied) {
   const grayBg = Color(0xFFF1F5F9), grayText = Color(0xFF475569);
   const greenBg = Color(0xFFDCFCE7), greenText = Color(0xFF15803D);
   const amberBg = Color(0xFFFEF3C7), amberText = Color(0xFFB45309);
+  if (t.isBillRequest) {
+    return const _TableDot(bg: Color(0xFFDBEAFE), border: kStatusBlue, text: Color(0xFF1D4ED8), icon: kStatusBlue, ring: kStatusBlue);
+  }
   if (t.hasServiceRequest) {
     return const _TableDot(bg: amberBg, border: kStatusAmber, text: amberText, icon: kStatusAmber, ring: kStatusAmber);
   }
@@ -406,7 +410,12 @@ class _TableMarker extends StatelessWidget {
               ),
               child: Center(
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.people_alt_rounded, size: math.max(12, tSize * 0.26), color: c.icon),
+                  Icon(
+                    table.isBillRequest
+                        ? Icons.receipt_long_rounded
+                        : table.hasServiceRequest ? Icons.notifications_active_rounded : Icons.people_alt_rounded,
+                    size: math.max(12, tSize * 0.26), color: c.icon,
+                  ),
                   const SizedBox(height: 1),
                   SizedBox(
                     width: tSize - 10,
@@ -415,6 +424,14 @@ class _TableMarker extends StatelessWidget {
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: c.text),
                     ),
                   ),
+                  if (table.isBillRequest)
+                    SizedBox(
+                      width: tSize - 6,
+                      child: Text(
+                        table.billBadge, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 8, fontWeight: FontWeight.w700, color: c.text),
+                      ),
+                    ),
                 ]),
               ),
             ),
@@ -529,6 +546,8 @@ class _FloorPlanPickerDialogState extends State<FloorPlanPickerDialog> {
               _legendDot(kStatusGreen, 'Đang phục vụ'),
               const SizedBox(width: 14),
               _legendDot(kStatusAmber, 'Gọi phục vụ'),
+              const SizedBox(width: 14),
+              _legendDot(kStatusBlue, 'Gọi tính tiền'),
               const Spacer(),
               const Text('Bấm vào bàn để chọn', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
             ]),
