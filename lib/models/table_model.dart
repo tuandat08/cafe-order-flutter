@@ -8,6 +8,11 @@ class TableModel {
   final String? currentOrderId;
   final Map<String, dynamic>? activeDiscount; // web: {id, code, type, value, maxDiscount, description}
   final DateTime? serviceRequest; // web: tables.serviceRequest (đang gọi phục vụ)
+  /// Khách gọi để làm gì: 'service' (gọi phục vụ) | 'bill' (gọi tính tiền).
+  /// null = web bản cũ / Security Rules cũ → coi như gọi phục vụ.
+  final String? serviceRequestType;
+  /// Hình thức khách muốn trả khi gọi tính tiền: 'cash' | 'transfer'.
+  final String? serviceRequestPayment;
   final DateTime? lastBilledAt;   // web: tables.lastBilledAt (đã xuất bill)
   final DateTime? clearedAt;      // web: tables.clearedAt (lần dọn bàn gần nhất)
   /// Mã các đơn nằm trong bill in gần nhất — đơn đặt SAU khi in bill không có
@@ -23,6 +28,8 @@ class TableModel {
     this.currentOrderId,
     this.activeDiscount,
     this.serviceRequest,
+    this.serviceRequestType,
+    this.serviceRequestPayment,
     this.lastBilledAt,
     this.clearedAt,
     this.lastBilledOrderIds,
@@ -53,6 +60,8 @@ class TableModel {
       currentOrderId: data['currentOrderId'],
       activeDiscount: data['activeDiscount'] is Map ? (data['activeDiscount'] as Map).cast<String, dynamic>() : null,
       serviceRequest: _ts(data['serviceRequest']),
+      serviceRequestType: data['serviceRequestType'] as String?,
+      serviceRequestPayment: data['serviceRequestPayment'] as String?,
       lastBilledAt: _ts(data['lastBilledAt']),
       clearedAt: _ts(data['clearedAt']),
       lastBilledOrderIds: data['lastBilledOrderIds'] is List
@@ -79,12 +88,41 @@ class TableModel {
 
   bool get isAvailable => status == 'available';
 
+  bool get isBillRequest => serviceRequest != null && serviceRequestType == 'bill';
+
+  String get _paymentLabel => switch (serviceRequestPayment) {
+        'transfer' => 'chuyển khoản',
+        'cash' => 'tiền mặt',
+        _ => '',
+      };
+
+  /// Nhãn ngắn (chip, tiêu đề banner): "Gọi phục vụ" / "Tính tiền · chuyển khoản".
+  String get serviceRequestLabel {
+    if (!isBillRequest) return 'Gọi phục vụ';
+    return _paymentLabel.isEmpty ? 'Gọi tính tiền' : 'Tính tiền · $_paymentLabel';
+  }
+
+  /// Câu thông báo trong thẻ bàn.
+  String get serviceRequestMessage {
+    if (!isBillRequest) return 'Khách đang gọi phục vụ!';
+    return _paymentLabel.isEmpty ? 'Khách muốn tính tiền!' : 'Khách muốn tính tiền — $_paymentLabel!';
+  }
+
+  /// Câu đọc bằng giọng nói khi có yêu cầu mới.
+  String serviceRequestSpeech(String tableLabel) {
+    if (!isBillRequest) return 'Bàn $tableLabel đang gọi nhân viên!';
+    return _paymentLabel.isEmpty
+        ? 'Bàn $tableLabel muốn thanh toán.'
+        : 'Bàn $tableLabel muốn thanh toán, $_paymentLabel.';
+  }
+
   TableModel copyWith({Map<String, dynamic>? activeDiscount, bool clearDiscount = false}) {
     return TableModel(
       id: id, name: name, capacity: capacity, status: status,
       currentOrderId: currentOrderId,
       activeDiscount: clearDiscount ? null : (activeDiscount ?? this.activeDiscount),
       serviceRequest: serviceRequest, lastBilledAt: lastBilledAt, clearedAt: clearedAt,
+      serviceRequestType: serviceRequestType, serviceRequestPayment: serviceRequestPayment,
       lastBilledOrderIds: lastBilledOrderIds,
       isTakeaway: isTakeaway,
     );

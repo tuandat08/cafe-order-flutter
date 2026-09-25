@@ -1258,11 +1258,14 @@ class _KDSTabState extends State<_KDSTab> {
     // Load tables để lấy activeDiscount + phát chuông khi có gọi phục vụ mới
     _tableSub = _tableService.streamTables().listen((tables) {
       if (!mounted) return;
-      final serviceIds = tables.where((t) => t.serviceRequest != null).map((t) => t.id).toSet();
+      // Khoá = bàn + loại yêu cầu → khách đổi "gọi phục vụ" sang "tính tiền" cũng báo lại
+      final requesting = tables.where((t) => t.serviceRequest != null).toList();
+      final serviceIds = requesting
+          .map((t) => '${t.id}|${t.serviceRequestType}|${t.serviceRequestPayment}').toSet();
       if (_audioUnlocked) {
-        for (final id in serviceIds) {
-          if (!_prevServiceIds.contains(id)) {
-            _playWarning('Bàn $id đang gọi nhân viên!', asset: 'sounds/service_call.mp3', speak: true);
+        for (final t in requesting) {
+          if (!_prevServiceIds.contains('${t.id}|${t.serviceRequestType}|${t.serviceRequestPayment}')) {
+            _playWarning(t.serviceRequestSpeech(t.id), asset: 'sounds/service_call.mp3', speak: true);
             break;
           }
         }
@@ -1944,7 +1947,7 @@ class _KDSTabState extends State<_KDSTab> {
                         const Icon(Icons.notifications_active, size: 18, color: Color(0xFFB45309)),
                         const SizedBox(width: 8),
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('Bàn ${t.id} — Gọi phục vụ',
+                          Text('Bàn ${t.id} — ${t.serviceRequestLabel}',
                               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFFB45309))),
                           const Text('Khách chưa đặt món', style: TextStyle(fontSize: 11, color: Color(0xFFD97706))),
                         ])),
@@ -1989,6 +1992,7 @@ class _KDSTabState extends State<_KDSTab> {
                           isClearing: isClearing,
                           isBilled: isBilled,
                           hasServiceRequest: hasServiceRequest,
+                          serviceRequestMessage: _findTable(tableId)?.serviceRequestMessage ?? 'Khách đang gọi phục vụ!',
                           activeDiscount: takeaway ? null : _findTable(tableId)?.activeDiscount,
                           showDiscount: !takeaway,
                           menuCache: _menuCache,
@@ -2065,6 +2069,7 @@ class _TableCard extends StatelessWidget {
   final bool isClearing;
   final bool isBilled;
   final bool hasServiceRequest;
+  final String serviceRequestMessage;
   final Map<String, dynamic>? activeDiscount;
   final bool showDiscount;
   final Map<String, MenuItemModel> menuCache;
@@ -2086,6 +2091,7 @@ class _TableCard extends StatelessWidget {
     required this.isClearing,
     required this.isBilled,
     required this.hasServiceRequest,
+    this.serviceRequestMessage = 'Khách đang gọi phục vụ!',
     required this.activeDiscount,
     this.showDiscount = true,
     required this.menuCache,
@@ -2129,8 +2135,8 @@ class _TableCard extends StatelessWidget {
             child: Row(children: [
               const Icon(Icons.notifications_active, size: 15, color: Color(0xFFB45309)),
               const SizedBox(width: 6),
-              const Expanded(child: Text('Khách đang gọi phục vụ!',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFB45309)))),
+              Expanded(child: Text(serviceRequestMessage,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFB45309)))),
               GestureDetector(
                 onTap: onClearServiceRequest,
                 child: Container(
@@ -5244,7 +5250,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
             else if (billed)
               _boardChip('Chờ đóng bàn', const Color(0xFFFFEDD5), const Color(0xFFC2410C)),
             _boardChip('$itemCount món', const Color(0xFFF1F5F9), const Color(0xFF475569)),
-            if (service) _boardChip('Gọi phục vụ', const Color(0xFFFEF3C7), const Color(0xFFB45309)),
+            if (service) _boardChip(_findTable(base)?.serviceRequestLabel ?? 'Gọi phục vụ', const Color(0xFFFEF3C7), const Color(0xFFB45309)),
           ]),
         ]),
       ),
@@ -5492,8 +5498,8 @@ class _TableBoardTabState extends State<_TableBoardTab> {
           child: Row(children: [
             const Icon(Icons.notifications_active, size: 15, color: Color(0xFFB45309)),
             const SizedBox(width: 6),
-            const Expanded(child: Text('Khách đang gọi phục vụ!',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFB45309)))),
+            Expanded(child: Text(_findTable(base)?.serviceRequestMessage ?? 'Khách đang gọi phục vụ!',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFB45309)))),
             GestureDetector(
               onTap: () => _handleClearServiceRequest(base),
               child: Container(

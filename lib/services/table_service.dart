@@ -77,7 +77,11 @@ class TableService {
       final ref = _db.collection('tables').doc(id);
       final snap = await ref.get();
       if (snap.exists) {
-        await writeLocal(ref.update({'serviceRequest': null}));
+        await writeLocal(ref.update({
+          'serviceRequest': null,
+          'serviceRequestType': null,
+          'serviceRequestPayment': null,
+        }));
         return;
       }
     }
