@@ -99,6 +99,8 @@ class InvoiceService {
     String? staffName,
     String? staffId,
     String? invoiceId, // nếu có (từ newInvoiceId()) → ghi đúng ID này, để khớp với preview
+    bool excluded = false, // true = bill vẫn ghi lại nhưng KHÔNG tính doanh thu (quản lý duyệt)
+    String? excludeReason,
   }) async {
     try {
       final isPrint2 = previousInvoiceId != null;
@@ -119,7 +121,9 @@ class InvoiceService {
         'staffId': staffId,
         'createdAt': Timestamp.fromDate(DateTime.now()),
         'type': 'payment_record',
-        'status': 'active',
+        // chỉ 'active' mới tính doanh thu; 'excluded' = ghi lại để minh bạch sổ sách
+        'status': excluded ? 'excluded' : 'active',
+        if (excluded) 'excludeReason': excludeReason,
         'printCount': isPrint2 ? 2 : 1,
         if (isPrint2) 'isPrint2': true,
         if (isPrint2) 'reason': reason,

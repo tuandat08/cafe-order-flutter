@@ -1505,7 +1505,8 @@ class _KDSTabState extends State<_KDSTab> {
         onPrint: (data) async {
           final act = table?.activeDiscount;
           final invoiceId = data['shouldSave'] == true ? previewInvoiceId : null;
-          if (data['shouldSave'] == true) {
+          // Luôn ghi lại bill (kể cả khi không tính doanh thu) để sổ sách minh bạch
+          {
             await _invoiceService.saveInvoice({
               'orderId': firstOrderId,
               'tableId': tableId,
@@ -1519,7 +1520,10 @@ class _KDSTabState extends State<_KDSTab> {
               'discountCode': data['discountCode'],
               'totalAmount': data['finalTotal'],
             }, reason: data['reason'], previousInvoiceId: data['previousInvoiceId'],
-               staffName: staffName, staffId: staffId, invoiceId: previewInvoiceId);
+               staffName: staffName, staffId: staffId, invoiceId: invoiceId,
+               excluded: data['shouldSave'] != true, excludeReason: data['excludeReason']);
+          }
+          if (data['shouldSave'] == true) {
             // Takeaway: KHÔNG ghi lastBilledAt lên bàn chung (tránh mọi thẻ mang về bị "đã bill")
             if (!isTakeaway) {
               await _orderService.updateTableLastBilledAt(tableId,
@@ -1598,9 +1602,10 @@ class _KDSTabState extends State<_KDSTab> {
         ReceiptLine('29 Nguyễn Hiến Lê, Hoà Xuân Đà Nẵng', fontSize: 20, align: ReceiptAlign.center),
         ReceiptLine('Hotline: 0742-619-457', fontSize: 20, align: ReceiptAlign.center),
         ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
+        ReceiptLine('PHIẾU THANH TOÁN', bold: true, fontSize: 28, align: ReceiptAlign.center),
         if (invoiceCode != null || checkInStr != null)
           ReceiptLine(
-            invoiceCode != null ? 'Số hóa đơn: #$invoiceCode' : '',
+            invoiceCode != null ? 'Số phiếu: #$invoiceCode' : '',
             right: checkInStr != null ? 'Giờ vào: $checkInStr' : '',
             fontSize: 18,
           ),
@@ -1648,9 +1653,11 @@ class _KDSTabState extends State<_KDSTab> {
         pw.Center(child: pw.Text('29 Nguyễn Hiến Lê, Hoà Xuân Đà Nẵng', style: const pw.TextStyle(fontSize: 8))),
         pw.Center(child: pw.Text('Hotline: 0742-619-457', style: const pw.TextStyle(fontSize: 8))),
         pw.Divider(thickness: 1),
+        pw.Center(child: pw.Text('PHIẾU THANH TOÁN', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
+        pw.SizedBox(height: 4),
         if (invoiceCode != null || checkInStr != null)
           pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-            pw.Text(invoiceCode != null ? 'Số hóa đơn: #$invoiceCode' : '', style: const pw.TextStyle(fontSize: 8)),
+            pw.Text(invoiceCode != null ? 'Số phiếu: #$invoiceCode' : '', style: const pw.TextStyle(fontSize: 8)),
             pw.Text(checkInStr != null ? 'Giờ vào: $checkInStr' : '', style: const pw.TextStyle(fontSize: 8)),
           ]),
         pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
@@ -3918,12 +3925,13 @@ class _InvoiceDialog extends StatefulWidget {
 class _InvoiceDialogState extends State<_InvoiceDialog> {
   bool _checking = true;
   Map<String, dynamic>? _existing;
-  double _vat = 0;
+  // Hộ kinh doanh nộp GTGT theo % doanh thu, KHÔNG cộng VAT vào bill khách → luôn 0.
+  final double _vat = 0;
   double _service = 0;
   double _discount = 0;
   final _reasonCtrl = TextEditingController();
   final _discountCtrl = TextEditingController();
-  final _vatCtrl = TextEditingController(text: '0');
+  final _excludeReasonCtrl = TextEditingController();
   final _serviceCtrl = TextEditingController(text: '0');
   bool _saveRevenue = true;
   AccountModel? _revenueApprover; // admin đã duyệt "không lưu doanh thu"
@@ -3954,7 +3962,7 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
   void dispose() {
     _reasonCtrl.dispose();
     _discountCtrl.dispose();
-    _vatCtrl.dispose();
+    _excludeReasonCtrl.dispose();
     _serviceCtrl.dispose();
     super.dispose();
   }
@@ -3963,6 +3971,11 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
     if (_isPrint2 && _reasonCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Vui lòng nhập lý do in lại hóa đơn!'), backgroundColor: Color(0xFFDC2626)));
+      return;
+    }
+    if (!_saveRevenue && _excludeReasonCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Vui lòng nhập lý do không tính doanh thu!'), backgroundColor: Color(0xFFDC2626)));
       return;
     }
     setState(() => _printing = true);
@@ -3989,6 +4002,7 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
       'serviceCharge': _service,
       'discount': _discount,
       'shouldSave': _saveRevenue,
+      'excludeReason': _saveRevenue ? null : _excludeReasonCtrl.text.trim(),
       'finalTotal': _total,
       'subtotal': _subtotal,
       'vatAmount': _vatAmount,
@@ -4004,7 +4018,10 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
   @override
   Widget build(BuildContext context) {
     final items = widget.tableOrders.expand((o) => o.items).toList();
-    final canPrint = !_checking && (!_isPrint2 || _reasonCtrl.text.trim().isNotEmpty) && !_printing;
+    final canPrint = !_checking
+        && (!_isPrint2 || _reasonCtrl.text.trim().isNotEmpty)
+        && (_saveRevenue || _excludeReasonCtrl.text.trim().isNotEmpty)
+        && !_printing;
 
     return Dialog(
       insetPadding: const EdgeInsets.all(16),
@@ -4051,15 +4068,6 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                         ),
                         const SizedBox(height: 12),
                       ],
-                      _label('VAT (%)'),
-                      TextField(
-                        controller: _vatCtrl,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(fontSize: 13),
-                        decoration: _fieldDeco('0'),
-                        onChanged: (v) => setState(() => _vat = double.tryParse(v) ?? 0),
-                      ),
-                      const SizedBox(height: 10),
                       _label('Phí dịch vụ (%)'),
                       TextField(
                         controller: _serviceCtrl,
@@ -4115,6 +4123,20 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                           const Text('Tự động lưu vào doanh thu', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF1D4ED8))),
                         ]),
                       ),
+                      if (!_saveRevenue) ...[
+                        const SizedBox(height: 10),
+                        _label('Lý do không tính doanh thu (bắt buộc)', color: const Color(0xFFD97706)),
+                        TextField(
+                          controller: _excludeReasonCtrl,
+                          maxLines: 2,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: _fieldDeco('VD: Mời khách, nhân viên uống, pha lỗi...'),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text('Bill vẫn được ghi lại để đối chiếu, nhưng không cộng vào doanh thu.',
+                            style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
+                      ],
                     ]),
                   ),
                 ),
@@ -4164,6 +4186,7 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                     const Center(child: Text('29 Nguyễn Hiến Lê, Hoà Xuân Đà Nẵng', style: TextStyle(fontSize: 11, color: Colors.black))),
                     const Center(child: Text('Hotline: 0742-619-457', style: TextStyle(fontSize: 11, color: Colors.black))),
                     const Divider(color: Colors.black, thickness: 1.5),
+                    const Center(child: Text('PHIẾU THANH TOÁN', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.black))),
                     const SizedBox(height: 4),
                     // Số hóa đơn chỉ hiện khi thực sự sẽ lưu (khớp đúng logic khi in)
                     if (_saveRevenue && widget.previewInvoiceId != null || widget.checkInAt != null)
@@ -4172,7 +4195,7 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                           Text(
                             _saveRevenue && widget.previewInvoiceId != null
-                                ? 'Số hóa đơn: #${_invoiceCode(widget.previewInvoiceId!)}'
+                                ? 'Số phiếu: #${_invoiceCode(widget.previewInvoiceId!)}'
                                 : '',
                             style: const TextStyle(fontSize: 11, color: Colors.black),
                           ),
@@ -4552,7 +4575,8 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         onPrint: (data) async {
           final act = table?.activeDiscount;
           final invoiceId = data['shouldSave'] == true ? previewInvoiceId : null;
-          if (data['shouldSave'] == true) {
+          // Luôn ghi lại bill (kể cả khi không tính doanh thu) để sổ sách minh bạch
+          {
             await _invoiceService.saveInvoice({
               'orderId': firstOrderId,
               'tableId': tableId,
@@ -4566,7 +4590,10 @@ class _TableBoardTabState extends State<_TableBoardTab> {
               'discountCode': data['discountCode'],
               'totalAmount': data['finalTotal'],
             }, reason: data['reason'], previousInvoiceId: data['previousInvoiceId'],
-               staffName: staffName, staffId: staffId, invoiceId: previewInvoiceId);
+               staffName: staffName, staffId: staffId, invoiceId: invoiceId,
+               excluded: data['shouldSave'] != true, excludeReason: data['excludeReason']);
+          }
+          if (data['shouldSave'] == true) {
             if (!isTakeaway) {
               await _orderService.updateTableLastBilledAt(tableId,
                   orderIds: tableOrders.map((o) => o.id).toList());
@@ -4642,9 +4669,10 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         ReceiptLine('29 Nguyễn Hiến Lê, Hoà Xuân Đà Nẵng', fontSize: 20, align: ReceiptAlign.center),
         ReceiptLine('Hotline: 0742-619-457', fontSize: 20, align: ReceiptAlign.center),
         ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
+        ReceiptLine('PHIẾU THANH TOÁN', bold: true, fontSize: 28, align: ReceiptAlign.center),
         if (invoiceCode != null || checkInStr != null)
           ReceiptLine(
-            invoiceCode != null ? 'Số hóa đơn: #$invoiceCode' : '',
+            invoiceCode != null ? 'Số phiếu: #$invoiceCode' : '',
             right: checkInStr != null ? 'Giờ vào: $checkInStr' : '',
             fontSize: 18,
           ),
@@ -4692,9 +4720,11 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         pw.Center(child: pw.Text('29 Nguyễn Hiến Lê, Hoà Xuân Đà Nẵng', style: const pw.TextStyle(fontSize: 8))),
         pw.Center(child: pw.Text('Hotline: 0742-619-457', style: const pw.TextStyle(fontSize: 8))),
         pw.Divider(thickness: 1),
+        pw.Center(child: pw.Text('PHIẾU THANH TOÁN', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
+        pw.SizedBox(height: 4),
         if (invoiceCode != null || checkInStr != null)
           pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-            pw.Text(invoiceCode != null ? 'Số hóa đơn: #$invoiceCode' : '', style: const pw.TextStyle(fontSize: 8)),
+            pw.Text(invoiceCode != null ? 'Số phiếu: #$invoiceCode' : '', style: const pw.TextStyle(fontSize: 8)),
             pw.Text(checkInStr != null ? 'Giờ vào: $checkInStr' : '', style: const pw.TextStyle(fontSize: 8)),
           ]),
         pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [

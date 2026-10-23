@@ -80,7 +80,7 @@ class ShiftService {
     int count = 0;
     for (final d in docs) {
       final inv = d.data();
-      if (inv['status'] == 'superseded') continue;
+      if (inv['status'] == 'superseded' || inv['status'] == 'excluded') continue;
       final amount = (inv['totalAmount'] ?? 0).toDouble();
       final method = inv['paymentMethod'];
       if (method == 'Tiền mặt') {
