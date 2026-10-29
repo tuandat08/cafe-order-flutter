@@ -198,12 +198,14 @@ class OrderService {
     String paymentType = 'POSTPAID',
     String? channel,
     String? externalOrderCode,
+    String? id,               // id đơn sinh trước (đơn trả trước: lưu hóa đơn trước rồi mới tạo đơn)
+    String? prepaidInvoiceId, // đơn mang về đã thu tiền lúc gọi món
   }) async {
     final total = items.fold(0.0, (s, i) => s + i.subtotal);
     final usd = double.parse((total / 26000).toStringAsFixed(2));
     // Ghi cả 2 schema (web totalAmount/paymentMethod + Flutter totalPrice/paymentType)
     // để web và Flutter đều đọc đúng
-    final ref = _db.collection('orders').doc();
+    final ref = id != null ? _db.collection('orders').doc(id) : _db.collection('orders').doc();
     await writeLocal(ref.set({
       'tableId': tableId,
       'items': items.map((i) => i.toMap()).toList(),
@@ -217,10 +219,14 @@ class OrderService {
       if (channel != null) 'channel': channel,
       if (externalOrderCode != null && externalOrderCode.isNotEmpty)
         'externalOrderCode': externalOrderCode,
+      if (prepaidInvoiceId != null) 'prepaidInvoiceId': prepaidInvoiceId,
       'createdAt': FieldValue.serverTimestamp(),
     }));
     return ref.id;
   }
+
+  /// Sinh trước 1 id đơn hàng (chưa ghi) — dùng cho đơn trả trước.
+  String newOrderId() => _db.collection('orders').doc().id;
 
   /// Ghi nhận đã in tem dán ly (đếm số lần in để nhân viên biết đơn đã in chưa).
   Future<void> markLabelPrinted(String orderId) async {

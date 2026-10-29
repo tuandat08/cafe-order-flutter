@@ -153,6 +153,9 @@ class OrderModel {
   final String? externalOrderCode;
   /// Số lần đã in tem dán ly cho đơn (0 = chưa in).
   final int labelPrintCount;
+  /// Đơn mang về TRẢ TRƯỚC: id hóa đơn đã thu tiền lúc gọi món (POS "Gửi & thu tiền").
+  /// Có giá trị → không thu tiền lần nữa; bấm Hoàn thành là đơn tự đóng.
+  final String? prepaidInvoiceId;
 
   OrderModel({
     required this.id,
@@ -172,7 +175,10 @@ class OrderModel {
     this.channel,
     this.externalOrderCode,
     this.labelPrintCount = 0,
+    this.prepaidInvoiceId,
   });
+
+  bool get isPrepaid => prepaidInvoiceId != null && prepaidInvoiceId!.isNotEmpty;
 
   bool get isDelivery => OrderChannel.isDelivery(channel);
 
@@ -218,6 +224,7 @@ class OrderModel {
       channel: data['channel']?.toString(),
       externalOrderCode: data['externalOrderCode']?.toString(),
       labelPrintCount: int.tryParse('${data['labelPrintCount'] ?? 0}') ?? 0,
+      prepaidInvoiceId: data['prepaidInvoiceId']?.toString(),
     );
   }
 

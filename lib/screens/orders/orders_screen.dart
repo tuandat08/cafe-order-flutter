@@ -487,6 +487,11 @@ class _POSTabState extends State<_POSTab> {
   String _channel = OrderChannel.dineIn;
   final _extCodeCtrl = TextEditingController();
   bool get _isDelivery => OrderChannel.isDelivery(_channel);
+  // Bàn đang chọn là bàn "Mang về" → cho phép "Gửi & thu tiền" (trả trước)
+  bool get _isTakeawaySelected {
+    final t = _posTables.where((x) => x.id == _tableId).firstOrNull;
+    return (t?.isTakeaway ?? false) || _tableId == 'Mang về';
+  }
 
   // Bàn nào đang có đơn active (chưa hoàn thành) → tô màu trong bộ chọn bàn
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _ordersSub;
@@ -640,6 +645,109 @@ class _POSTabState extends State<_POSTab> {
     });
   }
 
+  List<OrderItem> _cartItems() => _cart.map((e) => OrderItem(
+        id: e.item.id,
+        name: e.item.name,
+        quantity: e.qty,
+        price: e.unitPrice,
+        note: e.note.isEmpty ? null : e.note,
+        image: e.item.imageUrl,
+        size: e.size,
+        sweetness: e.sweetness,
+      )).toList();
+
+  // Mang về TRẢ TRƯỚC: thu tiền ngay lúc gọi món → lưu hóa đơn đã thu → gửi đơn vào
+  // bếp (gắn dấu đã thu). Pha xong bấm Hoàn thành là đơn tự đóng, không còn bước
+  // thanh toán phía sau. Lưu hóa đơn TRƯỚC rồi mới tạo đơn → không bao giờ có đơn
+  // "đã thu" mà thiếu hóa đơn (mất doanh thu).
+  Future<void> _submitPrepaid() async {
+    if (_cart.isEmpty || _submitting) return;
+    final items = _cartItems();
+    final total = items.fold<double>(0, (s, i) => s + i.subtotal);
+    final tableId = _tableId;
+    final res = await showDialog<_PaymentResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _CollectPaymentDialog(
+        tableId: tableId,
+        total: total,
+        checkout: true,
+        title: 'Mang về · trả trước',
+        items: items,
+        subtotal: total,
+        allowPrintAfter: true,
+        showAdvanced: false,
+      ),
+    );
+    if (res == null || !mounted) return;
+    final user = context.read<AuthProvider>().currentUser;
+    final messenger = ScaffoldMessenger.of(context);
+    final invoiceService = InvoiceService();
+    final isCash = res.method == 'Tiền mặt';
+    setState(() => _submitting = true);
+    try {
+      final orderId = _orderService.newOrderId();
+      final invId = invoiceService.newInvoiceId();
+      final saved = await invoiceService.saveInvoice({
+        'orderId': orderId,
+        'tableId': tableId,
+        'items': items.map((i) => i.toMap()).toList(),
+        'subtotal': total,
+        'vatPercent': 0,
+        'vatAmount': 0,
+        'servicePercent': 0,
+        'serviceAmount': 0,
+        'discount': 0,
+        'totalAmount': total,
+        'paymentMethod': res.method,
+        'paidAt': true,
+        if (isCash && res.cashReceived != null) 'cashReceived': res.cashReceived,
+        if (isCash && res.cashReceived != null) 'changeGiven': res.cashReceived! - total,
+        if (!isCash) 'transferConfirmed': res.transferConfirmed,
+      }, staffName: user?.fullName, staffId: user?.id, invoiceId: invId);
+      if (saved == null) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Không lưu được hóa đơn — đơn CHƯA được gửi, vui lòng thử lại'),
+            backgroundColor: AppColors.error));
+        return;
+      }
+      await _orderService.createOrder(
+        tableId: tableId,
+        items: items,
+        paymentType: 'PREPAID',
+        id: orderId,
+        prepaidInvoiceId: invId,
+      );
+      if (res.printBill) {
+        try {
+          await _printReceipt(
+            tableId,
+            [OrderModel(id: orderId, tableId: tableId, items: items, status: 'pending', totalPrice: total)],
+            {'subtotal': total, 'serviceAmount': 0.0, 'discount': 0.0, 'finalTotal': total},
+            staffName: user?.fullName,
+            checkInAt: DateTime.now(),
+            invoiceId: invId,
+            withQr: false,
+          );
+        } catch (e) {
+          debugPrint('[POS] print prepaid bill error: $e');
+        }
+      }
+      if (mounted) setState(() => _cart.clear());
+      final change = isCash && res.cashReceived != null ? res.cashReceived! - total : 0.0;
+      messenger.showSnackBar(SnackBar(
+        content: Text('Đã thu ${_vndFmt.format(total)}đ'
+            '${change > 0 ? ' · thối lại ${_vndFmt.format(change)}đ' : ''} · đơn đã gửi vào bếp'),
+        backgroundColor: AppColors.success,
+        duration: const Duration(seconds: 3),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   Future<void> _submit() async {
     if (_cart.isEmpty) return;
     final extCode = _extCodeCtrl.text.trim();
@@ -652,16 +760,7 @@ class _POSTabState extends State<_POSTab> {
     }
     setState(() => _submitting = true);
     try {
-      final items = _cart.map((e) => OrderItem(
-        id: e.item.id,
-        name: e.item.name,
-        quantity: e.qty,
-        price: e.unitPrice,
-        note: e.note.isEmpty ? null : e.note,
-        image: e.item.imageUrl,
-        size: e.size,
-        sweetness: e.sweetness,
-      )).toList();
+      final items = _cartItems();
       await _orderService.createOrder(
         tableId: _isDelivery ? _takeawayTableId : _tableId,
         items: items,
@@ -1009,6 +1108,34 @@ class _POSTabState extends State<_POSTab> {
                 Text('${_vndFmt.format(_total)}đ', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: AppColors.primary)),
               ]),
               const SizedBox(height: 12),
+              if (!_isDelivery && _isTakeawaySelected)
+                // Mang về: 2 nút xếp dọc, full chiều rộng (cột giỏ hàng hẹp ~300px,
+                // xếp ngang làm chữ bị cắt / vỡ nút):
+                //  - "Gửi & thu tiền" (trả trước, dùng nhiều) — nút chính
+                //  - "Gửi đơn · thu sau" — nút phụ viền
+                Column(children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white),
+                      onPressed: _cart.isEmpty || _submitting ? null : _submitPrepaid,
+                      icon: _submitting
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.payments_rounded, size: 16),
+                      label: Text(_submitting ? 'Đang gửi...' : 'Gửi & thu tiền'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _cart.isEmpty || _submitting ? null : _submit,
+                      icon: const Icon(Icons.send_rounded, size: 16),
+                      label: const Text('Gửi đơn · thu tiền sau', maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ])
+              else
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -1745,6 +1872,14 @@ class _KDSTabState extends State<_KDSTab> {
 
   // Tương đương handleUpdateStatus trong web
   void _handleUpdateStatus(String orderId, String status) {
+    // Đơn mang về đã thu tiền trước: Hoàn thành → đóng đơn luôn (không còn bước thanh toán)
+    if (status == 'completed') {
+      final o = _activeOrders.where((x) => x.id == orderId).firstOrNull;
+      if (o != null && o.isPrepaid) {
+        _orderService.updateStatus(orderId, 'closed');
+        return;
+      }
+    }
     _orderService.updateStatus(orderId, status);
   }
 
@@ -1847,146 +1982,9 @@ class _KDSTabState extends State<_KDSTab> {
   // "Cài đặt máy in") thì in thẳng qua máy in nhiệt; nếu chưa cấu hình thì in qua hộp
   // thoại in hệ thống (AirPrint) như trước đây.
   Future<void> _printInvoice(String tableId, List<OrderModel> tableOrders, Map<String, dynamic> data,
-      {String? staffName, DateTime? checkInAt, String? invoiceId, bool withQr = true}) async {
-    final items = tableOrders.expand((o) => o.items).toList();
-    final subtotal = (data['subtotal'] as num?)?.toDouble() ?? 0;
-    final serviceAmount = (data['serviceAmount'] as num?)?.toDouble() ?? 0;
-    final discount = (data['discount'] as num?)?.toDouble() ?? 0;
-    final total = (data['finalTotal'] as num?)?.toDouble() ?? 0;
-    final code = data['discountCode']?.toString();
-    final now = DateTime.now();
-    String two(int v) => v.toString().padLeft(2, '0');
-    String fmtDt(DateTime d) => '${two(d.day)}/${two(d.month)}/${d.year} ${two(d.hour)}:${two(d.minute)}';
-    final timeStr = fmtDt(now); // Giờ ra — thời điểm xuất/in hóa đơn
-    final checkInStr = checkInAt != null ? fmtDt(checkInAt) : null; // Giờ vào — đơn đầu tiên của phiên bàn
-    // Mã hóa đơn ngắn để tra cứu — giống web: 8 ký tự cuối của id hóa đơn, viết hoa
-    final invoiceCode = (invoiceId != null && invoiceId.length >= 8)
-        ? invoiceId.substring(invoiceId.length - 8).toUpperCase()
-        : invoiceId?.toUpperCase();
-
-    // Mã QR chuyển khoản (VietQR) — chỉ tải khi đã bật + cấu hình đủ tài khoản.
-    await BankQrService.instance.load();
-    Uint8List? qrBytes;
-    // withQr = false: bill in SAU khi đã thu tiền → không cần mã QR chuyển khoản
-    if (withQr && BankQrService.instance.shouldPrint) {
-      try {
-        final qrContent = invoiceCode != null ? 'HD $invoiceCode' : 'Ban $tableId';
-        final qrUrl = BankQrService.instance.imageUrl(amount: total, content: qrContent);
-        final resp = await http.get(Uri.parse(qrUrl)).timeout(const Duration(seconds: 8));
-        if (resp.statusCode == 200) qrBytes = resp.bodyBytes;
-      } catch (e) {
-        debugPrint('[QR] Lỗi tải mã QR chuyển khoản, bỏ qua: $e');
-      }
-    }
-
-    await PrinterService.instance.load();
-    if (PrinterService.instance.isConfigured) {
-      final lines = <ReceiptLine>[
-        ReceiptLine('EM COFFEE', bold: true, fontSize: 34, align: ReceiptAlign.center),
-        ReceiptLine('29 Nguyễn Hiến Lê, Hoà Xuân Đà Nẵng', fontSize: 20, align: ReceiptAlign.center),
-        ReceiptLine('Hotline: 0742-619-457', fontSize: 20, align: ReceiptAlign.center),
-        ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
-        ReceiptLine('PHIẾU THANH TOÁN', bold: true, fontSize: 28, align: ReceiptAlign.center),
-        if (invoiceCode != null || checkInStr != null)
-          ReceiptLine(
-            invoiceCode != null ? 'Số phiếu: #$invoiceCode' : '',
-            right: checkInStr != null ? 'Giờ vào: $checkInStr' : '',
-            fontSize: 18,
-          ),
-        ReceiptLine('Bàn: $tableId', right: 'Giờ ra: $timeStr', fontSize: 20),
-        if (staffName != null && staffName.isNotEmpty)
-          ReceiptLine('Thu ngân: $staffName', fontSize: 18),
-        ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
-        ReceiptLine('Tên Món', mid: 'Đơn Giá', right: 'Thành Tiền', fontSize: 18, bold: true),
-        ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
-        ...items.map((it) => ReceiptLine('${it.quantity} x ${it.name}',
-            mid: '${_vndFmt.format(it.price)}đ',
-            right: '${_vndFmt.format(it.price * it.quantity)}đ', fontSize: 22)),
-        // Đường kẻ mảnh chỉ cần khi có dòng phí dịch vụ / giảm giá ở giữa —
-        // không thì đã có đường kẻ đậm ngay trên TỔNG CỘNG (tránh 2 đường liền nhau)
-        if (serviceAmount > 0 || discount > 0)
-          ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
-        if (serviceAmount > 0)
-          ReceiptLine('Phí dịch vụ', right: '${_vndFmt.format(serviceAmount)}đ', fontSize: 22),
-        if (discount > 0)
-          ReceiptLine('Giảm giá${code != null ? ' [$code]' : ''}',
-              right: '-${_vndFmt.format(discount)}đ', fontSize: 22),
-        ReceiptLine('================================', fontSize: 18, align: ReceiptAlign.center),
-        ReceiptLine('TỔNG CỘNG', right: '${_vndFmt.format(total)}đ', fontSize: 28, bold: true),
-        ReceiptLine('', fontSize: 12),
-        ReceiptLine('CẢM ƠN QUÝ KHÁCH!', bold: true, fontSize: 22, align: ReceiptAlign.center),
-        ReceiptLine('HẸN GẶP LẠI', bold: true, fontSize: 22, align: ReceiptAlign.center),
-        if (qrBytes != null) ...[
-          ReceiptLine('', fontSize: 10),
-          ReceiptLine('Quét mã để chuyển khoản', fontSize: 18, align: ReceiptAlign.center),
-        ],
-      ];
-      try {
-        final bytes = await ReceiptImageBuilder.buildEscPosBytes(lines: lines, qrImageBytes: qrBytes);
-        await PrinterService.instance.sendBytes(bytes);
-        return;
-      } catch (e) {
-        debugPrint('[PRINTER] Lỗi in máy in nhiệt, chuyển sang in AirPrint: $e');
-        // rơi xuống nhánh in PDF/AirPrint bên dưới để không mất hóa đơn
-      }
-    }
-
-    // Chưa cấu hình máy in nhiệt (hoặc in nhiệt lỗi) → in PDF qua hộp thoại hệ thống
-    final doc = pw.Document(theme: await _receiptPdfTheme());
-    doc.addPage(pw.Page(
-      pageFormat: PdfPageFormat.roll80,
-      build: (c) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
-        pw.Center(child: pw.Text('EM COFFEE', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
-        pw.Center(child: pw.Text('29 Nguyễn Hiến Lê, Hoà Xuân Đà Nẵng', style: const pw.TextStyle(fontSize: 8))),
-        pw.Center(child: pw.Text('Hotline: 0742-619-457', style: const pw.TextStyle(fontSize: 8))),
-        pw.Divider(thickness: 1),
-        pw.Center(child: pw.Text('PHIẾU THANH TOÁN', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
-        pw.SizedBox(height: 4),
-        if (invoiceCode != null || checkInStr != null)
-          pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-            pw.Text(invoiceCode != null ? 'Số phiếu: #$invoiceCode' : '', style: const pw.TextStyle(fontSize: 8)),
-            pw.Text(checkInStr != null ? 'Giờ vào: $checkInStr' : '', style: const pw.TextStyle(fontSize: 8)),
-          ]),
-        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Text('Bàn: $tableId', style: const pw.TextStyle(fontSize: 9)),
-          pw.Text('Giờ ra: $timeStr', style: const pw.TextStyle(fontSize: 8)),
-        ]),
-        if (staffName != null && staffName.isNotEmpty)
-          pw.Text('Thu ngân: $staffName', style: const pw.TextStyle(fontSize: 8)),
-        pw.Divider(),
-        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Expanded(flex: 3, child: pw.Text('Tên Món', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-          pw.Expanded(flex: 2, child: pw.Text('Đơn Giá', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-          pw.Expanded(flex: 2, child: pw.Text('Thành Tiền', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-        ]),
-        pw.Divider(),
-        ...items.map((it) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Expanded(flex: 3, child: pw.Text('${it.quantity} x ${it.name}', style: const pw.TextStyle(fontSize: 9))),
-          pw.Expanded(flex: 2, child: pw.Text('${_vndFmt.format(it.price)}đ', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 9))),
-          pw.Expanded(flex: 2, child: pw.Text('${_vndFmt.format(it.price * it.quantity)}đ', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 9))),
-        ])),
-        // Chỉ kẻ khi có phí dịch vụ / giảm giá — tránh 2 đường kẻ liền nhau trên TỔNG CỘNG
-        if (serviceAmount > 0 || discount > 0) pw.Divider(),
-        if (serviceAmount > 0) _pdfRow('Phí dịch vụ', '${_vndFmt.format(serviceAmount)}đ'),
-        if (discount > 0) _pdfRow('Giảm giá${code != null ? ' [$code]' : ''}', '-${_vndFmt.format(discount)}đ'),
-        pw.Divider(thickness: 1),
-        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Text('TỔNG CỘNG', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-          pw.Text('${_vndFmt.format(total)}đ', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-        ]),
-        pw.SizedBox(height: 12),
-        pw.Center(child: pw.Text('CẢM ƠN QUÝ KHÁCH!', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-        pw.Center(child: pw.Text('HẸN GẶP LẠI', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-        if (qrBytes != null) ...[
-          pw.SizedBox(height: 8),
-          pw.Center(child: pw.Text('Quét mã để chuyển khoản', style: const pw.TextStyle(fontSize: 8))),
-          pw.SizedBox(height: 4),
-          pw.Center(child: pw.Image(pw.MemoryImage(qrBytes), width: 90, height: 90)),
-        ],
-      ]),
-    ));
-    await Printing.layoutPdf(onLayout: (format) async => doc.save());
-  }
+      {String? staffName, DateTime? checkInAt, String? invoiceId, bool copy = false, bool withQr = true}) =>
+      _printReceipt(tableId, tableOrders, data,
+          staffName: staffName, checkInAt: checkInAt, invoiceId: invoiceId, copy: copy, withQr: withQr);
 
   // In tem dán ly cho đơn Grab / ShopeeFood (bấm sau khi pha xong).
   Future<void> _handlePrintLabels(BuildContext ctx, OrderModel order) =>
@@ -2820,6 +2818,9 @@ class _OrderBlock extends StatelessWidget {
           Expanded(
             child: Wrap(spacing: 6, runSpacing: 4, children: [
               _Badge(label: statusLabel, bg: statusBg, textColor: statusText),
+              // Mang về trả trước: đã thu tiền lúc gọi món → pha xong là giao khách
+              if (order.isPrepaid)
+                _Badge(label: '✓ Đã thu tiền', bg: const Color(0xFF059669), textColor: Colors.white),
               if (order.isDelivery)
                 _Badge(
                   label: '${OrderChannel.label(order.channel)} #${order.externalOrderCode ?? ''}',
@@ -3110,6 +3111,153 @@ Future<void> _printOrderLabels(BuildContext context, OrderModel order, OrderServ
   }
 }
 
+// ── In bill (dùng chung KDS + Sơ đồ bàn + POS) ───────────────────────────────
+// Có máy in nhiệt (Cài đặt máy in) → in thẳng ESC/POS; chưa có → hộp thoại in PDF.
+// copy = true: in kèm dòng (BẢN SAO). withQr = false: không kèm QR chuyển khoản.
+Future<void> _printReceipt(String tableId, List<OrderModel> tableOrders, Map<String, dynamic> data,
+    {String? staffName, DateTime? checkInAt, String? invoiceId, bool copy = false, bool withQr = true}) async {
+  final items = tableOrders.expand((o) => o.items).toList();
+  final subtotal = (data['subtotal'] as num?)?.toDouble() ?? 0;
+  final serviceAmount = (data['serviceAmount'] as num?)?.toDouble() ?? 0;
+  final discount = (data['discount'] as num?)?.toDouble() ?? 0;
+  final total = (data['finalTotal'] as num?)?.toDouble() ?? 0;
+  final code = data['discountCode']?.toString();
+  final now = DateTime.now();
+  String two(int v) => v.toString().padLeft(2, '0');
+  String fmtDt(DateTime d) => '${two(d.day)}/${two(d.month)}/${d.year} ${two(d.hour)}:${two(d.minute)}';
+  final timeStr = fmtDt(now); // Giờ ra — thời điểm xuất/in hóa đơn
+  final checkInStr = checkInAt != null ? fmtDt(checkInAt) : null; // Giờ vào — đơn đầu tiên của phiên bàn
+  // Mã hóa đơn ngắn để tra cứu — giống web: 8 ký tự cuối của id hóa đơn, viết hoa
+  final invoiceCode = (invoiceId != null && invoiceId.length >= 8)
+      ? invoiceId.substring(invoiceId.length - 8).toUpperCase()
+      : invoiceId?.toUpperCase();
+
+  // Mã QR chuyển khoản (VietQR) — chỉ tải khi đã bật + cấu hình đủ tài khoản.
+  await BankQrService.instance.load();
+  Uint8List? qrBytes;
+  // withQr = false: bill in SAU khi đã thu tiền → không cần mã QR chuyển khoản
+  if (withQr && BankQrService.instance.shouldPrint) {
+    try {
+      final qrContent = invoiceCode != null ? 'HD $invoiceCode' : 'Ban $tableId';
+      final qrUrl = BankQrService.instance.imageUrl(amount: total, content: qrContent);
+      final resp = await http.get(Uri.parse(qrUrl)).timeout(const Duration(seconds: 8));
+      if (resp.statusCode == 200) qrBytes = resp.bodyBytes;
+    } catch (e) {
+      debugPrint('[QR] Lỗi tải mã QR chuyển khoản, bỏ qua: $e');
+    }
+  }
+
+  await PrinterService.instance.load();
+  if (PrinterService.instance.isConfigured) {
+    final lines = <ReceiptLine>[
+      ReceiptLine('EM COFFEE', bold: true, fontSize: 34, align: ReceiptAlign.center),
+      ReceiptLine('29 Nguyễn Hiến Lê, Hoà Xuân Đà Nẵng', fontSize: 20, align: ReceiptAlign.center),
+      ReceiptLine('Hotline: 0742-619-457', fontSize: 20, align: ReceiptAlign.center),
+      ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
+      ReceiptLine('PHIẾU THANH TOÁN', bold: true, fontSize: 28, align: ReceiptAlign.center),
+      if (copy) ReceiptLine('(BẢN SAO)', bold: true, fontSize: 20, align: ReceiptAlign.center),
+      if (invoiceCode != null || checkInStr != null)
+        ReceiptLine(
+          invoiceCode != null ? 'Số phiếu: #$invoiceCode' : '',
+          right: checkInStr != null ? 'Giờ vào: $checkInStr' : '',
+          fontSize: 18,
+        ),
+      ReceiptLine('Bàn: $tableId', right: 'Giờ ra: $timeStr', fontSize: 20),
+      if (staffName != null && staffName.isNotEmpty)
+        ReceiptLine('Thu ngân: $staffName', fontSize: 18),
+      ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
+      ReceiptLine('Tên Món', mid: 'Đơn Giá', right: 'Thành Tiền', fontSize: 18, bold: true),
+      ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
+      ...items.map((it) => ReceiptLine('${it.quantity} x ${it.name}',
+          mid: '${_vndFmt.format(it.price)}đ',
+          right: '${_vndFmt.format(it.price * it.quantity)}đ', fontSize: 22)),
+      // Đường kẻ mảnh chỉ cần khi có dòng phí dịch vụ / giảm giá ở giữa —
+      // không thì đã có đường kẻ đậm ngay trên TỔNG CỘNG (tránh 2 đường liền nhau)
+      if (serviceAmount > 0 || discount > 0)
+        ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
+      if (serviceAmount > 0)
+        ReceiptLine('Phí dịch vụ', right: '${_vndFmt.format(serviceAmount)}đ', fontSize: 22),
+      if (discount > 0)
+        ReceiptLine('Giảm giá${code != null ? ' [$code]' : ''}',
+            right: '-${_vndFmt.format(discount)}đ', fontSize: 22),
+      ReceiptLine('================================', fontSize: 18, align: ReceiptAlign.center),
+      ReceiptLine('TỔNG CỘNG', right: '${_vndFmt.format(total)}đ', fontSize: 28, bold: true),
+      ReceiptLine('', fontSize: 12),
+      ReceiptLine('CẢM ƠN QUÝ KHÁCH!', bold: true, fontSize: 22, align: ReceiptAlign.center),
+      ReceiptLine('HẸN GẶP LẠI', bold: true, fontSize: 22, align: ReceiptAlign.center),
+      if (qrBytes != null) ...[
+        ReceiptLine('', fontSize: 10),
+        ReceiptLine('Quét mã để chuyển khoản', fontSize: 18, align: ReceiptAlign.center),
+      ],
+    ];
+    try {
+      final bytes = await ReceiptImageBuilder.buildEscPosBytes(lines: lines, qrImageBytes: qrBytes);
+      await PrinterService.instance.sendBytes(bytes);
+      return;
+    } catch (e) {
+      debugPrint('[PRINTER] Lỗi in máy in nhiệt, chuyển sang in AirPrint: $e');
+      // rơi xuống nhánh in PDF/AirPrint bên dưới để không mất hóa đơn
+    }
+  }
+
+  // Chưa cấu hình máy in nhiệt (hoặc in nhiệt lỗi) → in PDF qua hộp thoại hệ thống
+  final doc = pw.Document(theme: await _receiptPdfTheme());
+  doc.addPage(pw.Page(
+    pageFormat: PdfPageFormat.roll80,
+    build: (c) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
+      pw.Center(child: pw.Text('EM COFFEE', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
+      pw.Center(child: pw.Text('29 Nguyễn Hiến Lê, Hoà Xuân Đà Nẵng', style: const pw.TextStyle(fontSize: 8))),
+      pw.Center(child: pw.Text('Hotline: 0742-619-457', style: const pw.TextStyle(fontSize: 8))),
+      pw.Divider(thickness: 1),
+      pw.Center(child: pw.Text('PHIẾU THANH TOÁN', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
+      if (copy) pw.Center(child: pw.Text('(BẢN SAO)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
+      pw.SizedBox(height: 4),
+      if (invoiceCode != null || checkInStr != null)
+        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+          pw.Text(invoiceCode != null ? 'Số phiếu: #$invoiceCode' : '', style: const pw.TextStyle(fontSize: 8)),
+          pw.Text(checkInStr != null ? 'Giờ vào: $checkInStr' : '', style: const pw.TextStyle(fontSize: 8)),
+        ]),
+      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+        pw.Text('Bàn: $tableId', style: const pw.TextStyle(fontSize: 9)),
+        pw.Text('Giờ ra: $timeStr', style: const pw.TextStyle(fontSize: 8)),
+      ]),
+      if (staffName != null && staffName.isNotEmpty)
+        pw.Text('Thu ngân: $staffName', style: const pw.TextStyle(fontSize: 8)),
+      pw.Divider(),
+      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+        pw.Expanded(flex: 3, child: pw.Text('Tên Món', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+        pw.Expanded(flex: 2, child: pw.Text('Đơn Giá', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+        pw.Expanded(flex: 2, child: pw.Text('Thành Tiền', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+      ]),
+      pw.Divider(),
+      ...items.map((it) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+        pw.Expanded(flex: 3, child: pw.Text('${it.quantity} x ${it.name}', style: const pw.TextStyle(fontSize: 9))),
+        pw.Expanded(flex: 2, child: pw.Text('${_vndFmt.format(it.price)}đ', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 9))),
+        pw.Expanded(flex: 2, child: pw.Text('${_vndFmt.format(it.price * it.quantity)}đ', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 9))),
+      ])),
+      // Chỉ kẻ khi có phí dịch vụ / giảm giá — tránh 2 đường kẻ liền nhau trên TỔNG CỘNG
+      if (serviceAmount > 0 || discount > 0) pw.Divider(),
+      if (serviceAmount > 0) _pdfRow('Phí dịch vụ', '${_vndFmt.format(serviceAmount)}đ'),
+      if (discount > 0) _pdfRow('Giảm giá${code != null ? ' [$code]' : ''}', '-${_vndFmt.format(discount)}đ'),
+      pw.Divider(thickness: 1),
+      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+        pw.Text('TỔNG CỘNG', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+        pw.Text('${_vndFmt.format(total)}đ', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+      ]),
+      pw.SizedBox(height: 12),
+      pw.Center(child: pw.Text('CẢM ƠN QUÝ KHÁCH!', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
+      pw.Center(child: pw.Text('HẸN GẶP LẠI', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
+      if (qrBytes != null) ...[
+        pw.SizedBox(height: 8),
+        pw.Center(child: pw.Text('Quét mã để chuyển khoản', style: const pw.TextStyle(fontSize: 8))),
+        pw.SizedBox(height: 4),
+        pw.Center(child: pw.Image(pw.MemoryImage(qrBytes), width: 90, height: 90)),
+      ],
+    ]),
+  ));
+  await Printing.layoutPdf(onLayout: (format) async => doc.save());
+}
+
 // ── Thu tiền gộp (dùng chung KDS + Sơ đồ bàn) ─────────────────────────────────
 // 1 màn, đúng thứ tự thực tế ở quầy:
 //   1. "In bill cho khách xem" (kèm QR chuyển khoản) → khách xem rồi chọn cách trả
@@ -3138,6 +3286,26 @@ Future<void> _runCheckout(
   VoidCallback? onBilled, // đã in bill cho khách xem (chưa thu) → thẻ bàn hiện "Đã xuất bill"
 }) async {
   if (orders.isEmpty) return;
+  // Đơn mang về đã thu tiền lúc gọi món → không thu lần nữa, chỉ đóng đơn
+  if (orders.every((o) => o.isPrepaid)) {
+    final u = context.read<AuthProvider>().currentUser;
+    final m = ScaffoldMessenger.of(context);
+    onBusy(true);
+    try {
+      await orderService.completeAllOrdersAndFreeTable(
+        tableId,
+        orders.where((o) => _kActive.contains(o.status)).map((o) => o.id).toList(),
+        totalAmount: orders.fold<double>(0, (s, o) => s + o.totalPrice),
+        staffId: u?.id, staffName: u?.fullName, staffRole: u?.role,
+      );
+      onDone?.call();
+      m.showSnackBar(const SnackBar(
+          content: Text('Đơn đã thu tiền trước — đã đóng đơn'), backgroundColor: AppColors.success));
+    } finally {
+      onBusy(false);
+    }
+    return;
+  }
   final first = orders.first;
   final items = orders.expand((o) => o.items).toList();
   final subtotal = items.fold<double>(0, (s, i) => s + i.price * i.quantity);
@@ -5479,6 +5647,14 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   }
 
   void _handleUpdateStatus(String orderId, String status) {
+    // Đơn mang về đã thu tiền trước: Hoàn thành → đóng đơn luôn (không còn bước thanh toán)
+    if (status == 'completed') {
+      final o = _activeOrders.where((x) => x.id == orderId).firstOrNull;
+      if (o != null && o.isPrepaid) {
+        _orderService.updateStatus(orderId, 'closed');
+        return;
+      }
+    }
     _orderService.updateStatus(orderId, status);
   }
 
@@ -5580,148 +5756,9 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   // "Cài đặt máy in") thì in thẳng qua máy in nhiệt; nếu chưa cấu hình thì in qua hộp
   // thoại in hệ thống (AirPrint) như trước đây.
   Future<void> _printInvoice(String tableId, List<OrderModel> tableOrders, Map<String, dynamic> data,
-      {String? staffName, DateTime? checkInAt, String? invoiceId, bool copy = false, bool withQr = true}) async {
-    final items = tableOrders.expand((o) => o.items).toList();
-    final subtotal = (data['subtotal'] as num?)?.toDouble() ?? 0;
-    final serviceAmount = (data['serviceAmount'] as num?)?.toDouble() ?? 0;
-    final discount = (data['discount'] as num?)?.toDouble() ?? 0;
-    final total = (data['finalTotal'] as num?)?.toDouble() ?? 0;
-    final code = data['discountCode']?.toString();
-    final now = DateTime.now();
-    String two(int v) => v.toString().padLeft(2, '0');
-    String fmtDt(DateTime d) => '${two(d.day)}/${two(d.month)}/${d.year} ${two(d.hour)}:${two(d.minute)}';
-    final timeStr = fmtDt(now); // Giờ ra — thời điểm xuất/in hóa đơn
-    final checkInStr = checkInAt != null ? fmtDt(checkInAt) : null; // Giờ vào — đơn đầu tiên của phiên bàn
-    // Mã hóa đơn ngắn để tra cứu — giống web: 8 ký tự cuối của id hóa đơn, viết hoa
-    final invoiceCode = (invoiceId != null && invoiceId.length >= 8)
-        ? invoiceId.substring(invoiceId.length - 8).toUpperCase()
-        : invoiceId?.toUpperCase();
-
-    // Mã QR chuyển khoản (VietQR) — chỉ tải khi đã bật + cấu hình đủ tài khoản.
-    await BankQrService.instance.load();
-    Uint8List? qrBytes;
-    // withQr = false: bill in SAU khi đã thu tiền → không cần mã QR chuyển khoản
-    if (withQr && BankQrService.instance.shouldPrint) {
-      try {
-        final qrContent = invoiceCode != null ? 'HD $invoiceCode' : 'Ban $tableId';
-        final qrUrl = BankQrService.instance.imageUrl(amount: total, content: qrContent);
-        final resp = await http.get(Uri.parse(qrUrl)).timeout(const Duration(seconds: 8));
-        if (resp.statusCode == 200) qrBytes = resp.bodyBytes;
-      } catch (e) {
-        debugPrint('[QR] Lỗi tải mã QR chuyển khoản, bỏ qua: $e');
-      }
-    }
-
-    await PrinterService.instance.load();
-    if (PrinterService.instance.isConfigured) {
-      final lines = <ReceiptLine>[
-        ReceiptLine('EM COFFEE', bold: true, fontSize: 34, align: ReceiptAlign.center),
-        ReceiptLine('29 Nguyễn Hiến Lê, Hoà Xuân Đà Nẵng', fontSize: 20, align: ReceiptAlign.center),
-        ReceiptLine('Hotline: 0742-619-457', fontSize: 20, align: ReceiptAlign.center),
-        ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
-        ReceiptLine('PHIẾU THANH TOÁN', bold: true, fontSize: 28, align: ReceiptAlign.center),
-        if (copy) ReceiptLine('(BẢN SAO)', bold: true, fontSize: 20, align: ReceiptAlign.center),
-        if (invoiceCode != null || checkInStr != null)
-          ReceiptLine(
-            invoiceCode != null ? 'Số phiếu: #$invoiceCode' : '',
-            right: checkInStr != null ? 'Giờ vào: $checkInStr' : '',
-            fontSize: 18,
-          ),
-        ReceiptLine('Bàn: $tableId', right: 'Giờ ra: $timeStr', fontSize: 20),
-        if (staffName != null && staffName.isNotEmpty)
-          ReceiptLine('Thu ngân: $staffName', fontSize: 18),
-        ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
-        ReceiptLine('Tên Món', mid: 'Đơn Giá', right: 'Thành Tiền', fontSize: 18, bold: true),
-        ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
-        ...items.map((it) => ReceiptLine('${it.quantity} x ${it.name}',
-            mid: '${_vndFmt.format(it.price)}đ',
-            right: '${_vndFmt.format(it.price * it.quantity)}đ', fontSize: 22)),
-        // Đường kẻ mảnh chỉ cần khi có dòng phí dịch vụ / giảm giá ở giữa —
-        // không thì đã có đường kẻ đậm ngay trên TỔNG CỘNG (tránh 2 đường liền nhau)
-        if (serviceAmount > 0 || discount > 0)
-          ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
-        if (serviceAmount > 0)
-          ReceiptLine('Phí dịch vụ', right: '${_vndFmt.format(serviceAmount)}đ', fontSize: 22),
-        if (discount > 0)
-          ReceiptLine('Giảm giá${code != null ? ' [$code]' : ''}',
-              right: '-${_vndFmt.format(discount)}đ', fontSize: 22),
-        ReceiptLine('================================', fontSize: 18, align: ReceiptAlign.center),
-        ReceiptLine('TỔNG CỘNG', right: '${_vndFmt.format(total)}đ', fontSize: 28, bold: true),
-        ReceiptLine('', fontSize: 12),
-        ReceiptLine('CẢM ƠN QUÝ KHÁCH!', bold: true, fontSize: 22, align: ReceiptAlign.center),
-        ReceiptLine('HẸN GẶP LẠI', bold: true, fontSize: 22, align: ReceiptAlign.center),
-        if (qrBytes != null) ...[
-          ReceiptLine('', fontSize: 10),
-          ReceiptLine('Quét mã để chuyển khoản', fontSize: 18, align: ReceiptAlign.center),
-        ],
-      ];
-      try {
-        final bytes = await ReceiptImageBuilder.buildEscPosBytes(lines: lines, qrImageBytes: qrBytes);
-        await PrinterService.instance.sendBytes(bytes);
-        return;
-      } catch (e) {
-        debugPrint('[PRINTER] Lỗi in máy in nhiệt, chuyển sang in AirPrint: $e');
-        // rơi xuống nhánh in PDF/AirPrint bên dưới để không mất hóa đơn
-      }
-    }
-
-    // Chưa cấu hình máy in nhiệt (hoặc in nhiệt lỗi) → in PDF qua hộp thoại hệ thống
-    final doc = pw.Document(theme: await _receiptPdfTheme());
-    doc.addPage(pw.Page(
-      pageFormat: PdfPageFormat.roll80,
-      build: (c) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
-        pw.Center(child: pw.Text('EM COFFEE', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
-        pw.Center(child: pw.Text('29 Nguyễn Hiến Lê, Hoà Xuân Đà Nẵng', style: const pw.TextStyle(fontSize: 8))),
-        pw.Center(child: pw.Text('Hotline: 0742-619-457', style: const pw.TextStyle(fontSize: 8))),
-        pw.Divider(thickness: 1),
-        pw.Center(child: pw.Text('PHIẾU THANH TOÁN', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
-        if (copy) pw.Center(child: pw.Text('(BẢN SAO)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-        pw.SizedBox(height: 4),
-        if (invoiceCode != null || checkInStr != null)
-          pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-            pw.Text(invoiceCode != null ? 'Số phiếu: #$invoiceCode' : '', style: const pw.TextStyle(fontSize: 8)),
-            pw.Text(checkInStr != null ? 'Giờ vào: $checkInStr' : '', style: const pw.TextStyle(fontSize: 8)),
-          ]),
-        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Text('Bàn: $tableId', style: const pw.TextStyle(fontSize: 9)),
-          pw.Text('Giờ ra: $timeStr', style: const pw.TextStyle(fontSize: 8)),
-        ]),
-        if (staffName != null && staffName.isNotEmpty)
-          pw.Text('Thu ngân: $staffName', style: const pw.TextStyle(fontSize: 8)),
-        pw.Divider(),
-        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Expanded(flex: 3, child: pw.Text('Tên Món', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-          pw.Expanded(flex: 2, child: pw.Text('Đơn Giá', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-          pw.Expanded(flex: 2, child: pw.Text('Thành Tiền', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-        ]),
-        pw.Divider(),
-        ...items.map((it) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Expanded(flex: 3, child: pw.Text('${it.quantity} x ${it.name}', style: const pw.TextStyle(fontSize: 9))),
-          pw.Expanded(flex: 2, child: pw.Text('${_vndFmt.format(it.price)}đ', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 9))),
-          pw.Expanded(flex: 2, child: pw.Text('${_vndFmt.format(it.price * it.quantity)}đ', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 9))),
-        ])),
-        // Chỉ kẻ khi có phí dịch vụ / giảm giá — tránh 2 đường kẻ liền nhau trên TỔNG CỘNG
-        if (serviceAmount > 0 || discount > 0) pw.Divider(),
-        if (serviceAmount > 0) _pdfRow('Phí dịch vụ', '${_vndFmt.format(serviceAmount)}đ'),
-        if (discount > 0) _pdfRow('Giảm giá${code != null ? ' [$code]' : ''}', '-${_vndFmt.format(discount)}đ'),
-        pw.Divider(thickness: 1),
-        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Text('TỔNG CỘNG', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-          pw.Text('${_vndFmt.format(total)}đ', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-        ]),
-        pw.SizedBox(height: 12),
-        pw.Center(child: pw.Text('CẢM ƠN QUÝ KHÁCH!', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-        pw.Center(child: pw.Text('HẸN GẶP LẠI', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-        if (qrBytes != null) ...[
-          pw.SizedBox(height: 8),
-          pw.Center(child: pw.Text('Quét mã để chuyển khoản', style: const pw.TextStyle(fontSize: 8))),
-          pw.SizedBox(height: 4),
-          pw.Center(child: pw.Image(pw.MemoryImage(qrBytes), width: 90, height: 90)),
-        ],
-      ]),
-    ));
-    await Printing.layoutPdf(onLayout: (format) async => doc.save());
-  }
+      {String? staffName, DateTime? checkInAt, String? invoiceId, bool copy = false, bool withQr = true}) =>
+      _printReceipt(tableId, tableOrders, data,
+          staffName: staffName, checkInAt: checkInAt, invoiceId: invoiceId, copy: copy, withQr: withQr);
 
   Future<void> _handleCompleteTable(
       BuildContext ctx, String tableId, List<OrderModel> tableOrders,
@@ -6958,6 +6995,10 @@ class _CollectPaymentDialog extends StatefulWidget {
   // trả tiền mặt hay chuyển khoản. Trả về true nếu đã lưu + in thành công.
   // null = bàn đã in bill rồi (chỉ còn bước ghi nhận thu tiền).
   final Future<bool> Function()? onPrintBill;
+  // Cho phép công tắc "In bill sau khi thu tiền" dù không có bước in bill trước
+  // (đơn mang về trả trước ở POS).
+  final bool allowPrintAfter;
+  final bool showAdvanced; // hiện nút "Tùy chọn khác…"
   const _CollectPaymentDialog({
     required this.tableId,
     required this.total,
@@ -6971,6 +7012,8 @@ class _CollectPaymentDialog extends StatefulWidget {
     this.note,
     this.defaultPrint = true,
     this.onPrintBill,
+    this.allowPrintAfter = false,
+    this.showAdvanced = true,
   });
 
   @override
@@ -6982,7 +7025,9 @@ class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
   final _cashCtrl = TextEditingController();
   bool _transferConfirmed = false;
   late bool _printBill = widget.defaultPrint;
-  bool _billPrinted = false;   // đã bấm "In bill cho khách xem" trong màn này
+  bool _billPrinted = false;   // đã bấm "In bill cho khách" trong màn này
+  // Có in bill sau khi thu tiền được không (công tắc + nhãn nút)
+  bool get _canPrintAfter => (widget.onPrintBill != null || widget.allowPrintAfter) && !_billPrinted;
   bool _printingBill = false;
 
   Future<void> _printBillFirst() async {
@@ -7264,7 +7309,7 @@ class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
               ),
             if (_method == 'Tiền mặt') _cashSection(),
             if (_method == 'Chuyển khoản') _transferSection(),
-            if (checkout && widget.onPrintBill != null && !_billPrinted) ...[
+            if (checkout && _canPrintAfter) ...[
               const SizedBox(height: 6),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -7278,7 +7323,7 @@ class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
         ),
       ),
       actions: [
-        if (checkout && !_billPrinted)
+        if (checkout && widget.showAdvanced && !_billPrinted)
           TextButton.icon(
             onPressed: () => Navigator.pop(context,
                 const _PaymentResult(method: '', total: 0, advanced: true)),
@@ -7296,12 +7341,12 @@ class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
                     total: _total,
                     cashReceived: _method == 'Tiền mặt' ? _cash : null,
                     transferConfirmed: _method == 'Chuyển khoản' && _transferConfirmed,
-                    printBill: checkout && widget.onPrintBill != null && !_billPrinted && _printBill,
+                    printBill: checkout && _canPrintAfter && _printBill,
                   ))
               : null,
           child: Text(!checkout
               ? 'Đã thu tiền · Dọn bàn'
-              : (widget.onPrintBill != null && !_billPrinted && _printBill) ? 'Thu tiền & in bill' : 'Đã thu tiền'),
+              : (_canPrintAfter && _printBill) ? 'Thu tiền & in bill' : 'Đã thu tiền'),
         ),
       ],
     );
