@@ -15,6 +15,8 @@ analyzer:
     - macos/**
     - android/**
     - ios/**
+    # Bản nháp cũ (không thuộc app) — không phân tích để khỏi báo hàng trăm lỗi giả
+    - "Claude outputs/**"
 
 linter:
   # The lint rules applied to this project can be customized in the

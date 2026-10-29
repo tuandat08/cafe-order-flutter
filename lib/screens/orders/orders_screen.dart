@@ -560,26 +560,25 @@ class _POSTabState extends State<_POSTab> {
   }
 
   Future<void> _addItem(MenuItemModel item) async {
-    String? size;
-    String? sweet;
-    // Đơn Grab/ShopeeFood: chọn size + độ ngọt để in lên tem ly
-    if (_isDelivery) {
-      final res = await showDialog<Map<String, String>>(
-        context: context,
-        builder: (_) => _OptionPicker(product: item, initSize: 'L', initSweet: '100%'),
-      );
-      if (res == null || !mounted) return;
-      size = res['size'];
-      sweet = res['sweet'];
-    }
+    // Mọi kênh (tại quán / Grab / ShopeeFood): chọn size + độ ngọt + ghi chú
+    // (hiện ở bếp; đơn app còn in lên tem ly)
+    final res = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (_) => _OptionPicker(product: item, initSize: 'L', initSweet: '100%'),
+    );
+    if (res == null || !mounted) return;
+    final size = res['size'];
+    final sweet = res['sweet'];
+    final note = res['note'] ?? '';
     setState(() {
+      // Cùng món + cùng size + độ ngọt + ghi chú → cộng dồn số lượng
       final existing = _cart
-          .where((e) => e.item.id == item.id && e.size == size && e.sweetness == sweet && e.note.isEmpty)
+          .where((e) => e.item.id == item.id && e.size == size && e.sweetness == sweet && e.note == note)
           .firstOrNull;
       if (existing != null) {
         existing.qty++;
       } else {
-        _cart.add(_CartEntry(item: item, size: size, sweetness: sweet,
+        _cart.add(_CartEntry(item: item, size: size, sweetness: sweet, note: note,
             unitPrice: DeliveryPricingService.instance.priceFor(item.price, _channel)));
       }
     });
@@ -1848,7 +1847,7 @@ class _KDSTabState extends State<_KDSTab> {
   // "Cài đặt máy in") thì in thẳng qua máy in nhiệt; nếu chưa cấu hình thì in qua hộp
   // thoại in hệ thống (AirPrint) như trước đây.
   Future<void> _printInvoice(String tableId, List<OrderModel> tableOrders, Map<String, dynamic> data,
-      {String? staffName, DateTime? checkInAt, String? invoiceId}) async {
+      {String? staffName, DateTime? checkInAt, String? invoiceId, bool withQr = true}) async {
     final items = tableOrders.expand((o) => o.items).toList();
     final subtotal = (data['subtotal'] as num?)?.toDouble() ?? 0;
     final serviceAmount = (data['serviceAmount'] as num?)?.toDouble() ?? 0;
@@ -1868,7 +1867,8 @@ class _KDSTabState extends State<_KDSTab> {
     // Mã QR chuyển khoản (VietQR) — chỉ tải khi đã bật + cấu hình đủ tài khoản.
     await BankQrService.instance.load();
     Uint8List? qrBytes;
-    if (BankQrService.instance.shouldPrint) {
+    // withQr = false: bill in SAU khi đã thu tiền → không cần mã QR chuyển khoản
+    if (withQr && BankQrService.instance.shouldPrint) {
       try {
         final qrContent = invoiceCode != null ? 'HD $invoiceCode' : 'Ban $tableId';
         final qrUrl = BankQrService.instance.imageUrl(amount: total, content: qrContent);
@@ -1902,7 +1902,10 @@ class _KDSTabState extends State<_KDSTab> {
         ...items.map((it) => ReceiptLine('${it.quantity} x ${it.name}',
             mid: '${_vndFmt.format(it.price)}đ',
             right: '${_vndFmt.format(it.price * it.quantity)}đ', fontSize: 22)),
-        ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
+        // Đường kẻ mảnh chỉ cần khi có dòng phí dịch vụ / giảm giá ở giữa —
+        // không thì đã có đường kẻ đậm ngay trên TỔNG CỘNG (tránh 2 đường liền nhau)
+        if (serviceAmount > 0 || discount > 0)
+          ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
         if (serviceAmount > 0)
           ReceiptLine('Phí dịch vụ', right: '${_vndFmt.format(serviceAmount)}đ', fontSize: 22),
         if (discount > 0)
@@ -1962,7 +1965,8 @@ class _KDSTabState extends State<_KDSTab> {
           pw.Expanded(flex: 2, child: pw.Text('${_vndFmt.format(it.price)}đ', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 9))),
           pw.Expanded(flex: 2, child: pw.Text('${_vndFmt.format(it.price * it.quantity)}đ', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 9))),
         ])),
-        pw.Divider(),
+        // Chỉ kẻ khi có phí dịch vụ / giảm giá — tránh 2 đường kẻ liền nhau trên TỔNG CỘNG
+        if (serviceAmount > 0 || discount > 0) pw.Divider(),
         if (serviceAmount > 0) _pdfRow('Phí dịch vụ', '${_vndFmt.format(serviceAmount)}đ'),
         if (discount > 0) _pdfRow('Giảm giá${code != null ? ' [$code]' : ''}', '-${_vndFmt.format(discount)}đ'),
         pw.Divider(thickness: 1),
@@ -1987,6 +1991,42 @@ class _KDSTabState extends State<_KDSTab> {
   // In tem dán ly cho đơn Grab / ShopeeFood (bấm sau khi pha xong).
   Future<void> _handlePrintLabels(BuildContext ctx, OrderModel order) =>
       _printOrderLabels(ctx, order, _orderService);
+
+  // Thu tiền gộp: xem bill + thu tiền + in bill + đóng bàn trong 1 màn
+  Future<void> _checkout(BuildContext ctx, String tableId, List<OrderModel> orders, String cardKey, bool takeaway) {
+    final staff = ctx.read<AuthProvider>().currentUser;
+    DateTime? checkIn;
+    for (final o in orders) {
+      final t = o.createdAt;
+      if (t != null && (checkIn == null || t.isBefore(checkIn))) checkIn = t;
+    }
+    final title = takeaway
+        ? 'Mang về • #${orders.first.id.length > 4 ? orders.first.id.substring(orders.first.id.length - 4) : orders.first.id}'
+        : (_findTable(tableId)?.name ?? 'Bàn $tableId');
+    return _runCheckout(ctx,
+        tableId: tableId,
+        title: title,
+        orders: orders,
+        isTakeaway: takeaway,
+        table: _findTable(tableId),
+        invoiceService: _invoiceService,
+        orderService: _orderService,
+        tableService: _tableService,
+        discountService: _discountService,
+        printBill: (data, invId, withQr) => _printInvoice(tableId, orders, data,
+            staffName: staff?.fullName, checkInAt: checkIn, invoiceId: invId, withQr: withQr),
+        onAdvanced: () => _handleOpenPayment(ctx, tableId, orders, cardKey: cardKey, isTakeaway: takeaway),
+        onBilled: () {
+          if (mounted) setState(() => _billedOrderIds[cardKey] = orders.map((o) => o.id).toSet());
+        },
+        onBusy: (b) {
+          if (!mounted) return;
+          setState(() => b ? _clearingTableIds.add(cardKey) : _clearingTableIds.remove(cardKey));
+        },
+        onDone: () {
+          if (mounted) setState(() => _billedOrderIds.remove(cardKey));
+        });
+  }
 
   // Đơn Grab / ShopeeFood: giao tài xế → ghi hóa đơn kênh app + đóng đơn.
   Future<void> _handleDeliveryHandover(BuildContext ctx, String tableId, List<OrderModel> orders, String cardKey) =>
@@ -2324,7 +2364,7 @@ class _KDSTabState extends State<_KDSTab> {
                           onUpdateStatus: _handleUpdateStatus,
                           onPayment: firstOrder.isDelivery
                               ? () => _handleDeliveryHandover(ctx, tableId, tableOrders, cardKey)
-                              : () => _handleOpenPayment(ctx, tableId, tableOrders, cardKey: cardKey, isTakeaway: takeaway),
+                              : () => _checkout(ctx, tableId, tableOrders, cardKey, takeaway),
                           onClearTable: () => _handleCompleteTable(ctx, tableId, tableOrders, isBilled: isBilled, cardKey: cardKey, isTakeaway: takeaway),
                           onViewDetail: () => _showDetailDialog(ctx, tableId, tableOrders),
                           onAddProduct: () => _showAddProductDialog(ctx, tableId),
@@ -2497,7 +2537,7 @@ class _TableCard extends StatelessWidget {
               ),
               // Nút Thanh toán (CreditCard) — disabled nếu chưa xong
               _HeaderActionBtn(
-                label: !isAllCompleted ? 'Đang pha' : tableOrders.first.isDelivery ? 'Giao tài xế' : 'Thanh toán',
+                label: !isAllCompleted ? 'Đang pha' : tableOrders.first.isDelivery ? 'Giao tài xế' : 'Thu tiền',
                 icon: tableOrders.first.isDelivery ? Icons.delivery_dining_rounded : Icons.credit_card_rounded,
                 enabled: isAllCompleted && !isClearing,
                 enabledColor: const Color(0xFF2563EB),
@@ -2592,6 +2632,16 @@ class _TableCard extends StatelessWidget {
           ]),
         ),
         const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+
+        // Bàn có từ 2 đơn chưa xong → 1 nút làm cả bàn (Bắt đầu pha / Hoàn thành tất cả)
+        if (tableOrders.where((o) => !_isDone(o.status)).length >= 2)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: _BulkStepBtn(
+              orders: tableOrders.where((o) => !_isDone(o.status)).toList(),
+              onUpdateStatus: onUpdateStatus,
+            ),
+          ),
 
         // ── Danh sách đơn (scrollable) ──
         Flexible(
@@ -2930,6 +2980,48 @@ class _OrderBlock extends StatelessWidget {
   }
 }
 
+// ── Nút làm cả bàn 1 lần (theo đúng 2 bước như từng đơn) ───────────────────────
+//  - còn đơn mới (pending) → "Bắt đầu pha" / "Bắt đầu pha tất cả (N đơn)"
+//  - tất cả đang pha       → "Hoàn thành" / "Hoàn thành tất cả (N đơn)"
+class _BulkStepBtn extends StatelessWidget {
+  final List<OrderModel> orders; // các đơn chưa xong của bàn
+  final void Function(String orderId, String status) onUpdateStatus;
+  const _BulkStepBtn({required this.orders, required this.onUpdateStatus});
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = orders.where((o) => o.status == 'pending').toList();
+    final starting = pending.isNotEmpty;
+    final targets = starting ? pending : orders;
+    final color = starting ? const Color(0xFF2563EB) : const Color(0xFF059669);
+    final n = targets.length;
+    final label = starting
+        ? (n <= 1 ? 'Bắt đầu pha' : 'Bắt đầu pha tất cả ($n đơn)')
+        : (n <= 1 ? 'Hoàn thành' : 'Hoàn thành tất cả ($n đơn)');
+    return GestureDetector(
+      onTap: () {
+        for (final o in targets) {
+          onUpdateStatus(o.id, starting ? 'preparing' : 'completed');
+        }
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color),
+        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(starting ? Icons.local_cafe_rounded : Icons.done_all_rounded, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
+        ]),
+      ),
+    );
+  }
+}
+
 // ── Nút Hoàn thành ────────────────────────────────────────────────────────────
 class _HoanThanhBtn extends StatefulWidget {
   final OrderModel order;
@@ -3015,6 +3107,231 @@ Future<void> _printOrderLabels(BuildContext context, OrderModel order, OrderServ
       backgroundColor: AppColors.error,
       duration: const Duration(seconds: 4),
     ));
+  }
+}
+
+// ── Thu tiền gộp (dùng chung KDS + Sơ đồ bàn) ─────────────────────────────────
+// 1 màn, đúng thứ tự thực tế ở quầy:
+//   1. "In bill cho khách xem" (kèm QR chuyển khoản) → khách xem rồi chọn cách trả
+//   2. Chọn phương thức (chọn sẵn nếu khách đã chọn trên menu) → "Đã thu tiền":
+//      ghi nhận thu tiền, đóng đơn, trả bàn. Khách chưa trả ngay → "Để sau".
+// Khách trả luôn không cần xem bill → chọn phương thức → "Thu tiền & in bill".
+// Bàn đã in bill trước đó (vd khách xem bill tạm tính) → KHÔNG tạo hóa đơn mới,
+// chỉ ghi nhận thu tiền vào hóa đơn đó. Cần phí dịch vụ / không tính doanh thu /
+// in bill tạm tính → nút "Tùy chọn khác…" mở luồng xuất bill đầy đủ như cũ.
+Future<void> _runCheckout(
+  BuildContext context, {
+  required String tableId,
+  required String title,
+  required List<OrderModel> orders,
+  required bool isTakeaway,
+  required TableModel? table,
+  required InvoiceService invoiceService,
+  required OrderService orderService,
+  required TableService tableService,
+  required DiscountService discountService,
+  // In bill: (data, invoiceId, withQr) — nơi gọi tự gắn bàn / thu ngân / giờ vào
+  required Future<void> Function(Map<String, dynamic> data, String? invoiceId, bool withQr) printBill,
+  required VoidCallback onAdvanced,
+  required void Function(bool busy) onBusy,
+  VoidCallback? onDone,
+  VoidCallback? onBilled, // đã in bill cho khách xem (chưa thu) → thẻ bàn hiện "Đã xuất bill"
+}) async {
+  if (orders.isEmpty) return;
+  final first = orders.first;
+  final items = orders.expand((o) => o.items).toList();
+  final subtotal = items.fold<double>(0, (s, i) => s + i.price * i.quantity);
+  final discount = isTakeaway
+      ? orders.fold<double>(0, (s, o) => s + o.discountAmount)
+      : _calcDiscount(table?.activeDiscount, subtotal);
+  final code = isTakeaway
+      ? orders.map((o) => o.discountCode).firstWhere((c) => c != null && c.isNotEmpty, orElse: () => null)
+      : table?.activeDiscount?['code']?.toString();
+  var total = subtotal - discount;
+
+  // Bàn đã in bill trong phiên này chưa?
+  DateTime? sessionStart;
+  for (final o in orders) {
+    final t = o.createdAt;
+    if (t != null && (sessionStart == null || t.isBefore(sessionStart))) sessionStart = t;
+  }
+  onBusy(true);
+  Map<String, dynamic>? existing;
+  try {
+    existing = isTakeaway
+        ? await invoiceService.getLatestActiveForOrder(first.id)
+        : await invoiceService.getLatestActiveForTable(tableId,
+            clearedAt: table?.clearedAt, sessionStart: sessionStart);
+  } finally {
+    onBusy(false);
+  }
+  if (!context.mounted) return;
+  String? note;
+  if (existing != null) {
+    total = (existing['totalAmount'] as num?)?.toDouble() ?? total;
+    final ts = existing['createdAt'];
+    final at = ts is Timestamp ? DateFormat('HH:mm').format(ts.toDate()) : '';
+    note = 'Bàn đã in bill${at.isEmpty ? '' : ' lúc $at'} — chỉ ghi nhận thu tiền, không tạo hóa đơn mới.';
+  }
+
+  // Khách đã chọn hình thức trả khi bấm "Tính tiền" trên menu → chọn sẵn
+  final String? initialMethod = (table?.isBillRequest ?? false)
+      ? switch (table?.serviceRequestPayment) {
+          'cash' => 'Tiền mặt',
+          'transfer' => 'Chuyển khoản',
+          _ => null,
+        }
+      : null;
+
+  final user = context.read<AuthProvider>().currentUser;
+  final messenger = ScaffoldMessenger.of(context);
+
+  Map<String, dynamic> invoiceData({String? method}) => {
+        'orderId': first.id,
+        'tableId': tableId,
+        'items': items.map((i) => i.toMap()).toList(),
+        'subtotal': subtotal,
+        'vatPercent': 0,
+        'vatAmount': 0,
+        'servicePercent': 0,
+        'serviceAmount': 0,
+        'discount': discount,
+        'discountCode': code,
+        'totalAmount': total,
+        'paymentMethod': method,
+      };
+  Map<String, dynamic> printData() => {
+        'subtotal': subtotal,
+        'serviceAmount': 0.0,
+        'discount': discount,
+        'finalTotal': total,
+        'discountCode': code,
+      };
+  Future<void> afterInvoiceSaved() async {
+    if (!isTakeaway) {
+      await orderService.updateTableLastBilledAt(tableId, orderIds: orders.map((o) => o.id).toList());
+    }
+    final actId = isTakeaway ? null : table?.activeDiscount?['id'];
+    if (actId != null) await discountService.incrementUsage(actId.toString());
+  }
+
+  // Bước "In bill cho khách xem": lưu hóa đơn (chưa thu tiền) + in bill kèm QR
+  String? preInvoiceId;
+  Future<bool> printBillFirst() async {
+    final id = invoiceService.newInvoiceId();
+    final saved = await invoiceService.saveInvoice(invoiceData(),
+        staffName: user?.fullName, staffId: user?.id, invoiceId: id);
+    if (saved == null) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Không lưu được hóa đơn, vui lòng thử lại'), backgroundColor: AppColors.error));
+      return false;
+    }
+    preInvoiceId = id;
+    await afterInvoiceSaved();
+    onBilled?.call();
+    try {
+      await printBill(printData(), id, true);
+    } catch (e) {
+      debugPrint('[Checkout] print error: $e');
+    }
+    return true;
+  }
+
+  final result = await showDialog<_PaymentResult>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => _CollectPaymentDialog(
+      tableId: tableId,
+      total: total,
+      checkout: true,
+      title: title,
+      items: items,
+      subtotal: subtotal,
+      discount: existing == null ? discount : 0,
+      discountCode: existing == null ? code : null,
+      initialMethod: initialMethod,
+      note: note,
+      defaultPrint: existing == null,
+      onPrintBill: existing == null ? printBillFirst : null,
+    ),
+  );
+  if (result == null || !context.mounted) return;
+  if (result.advanced) {
+    onAdvanced();
+    return;
+  }
+
+  final isCash = result.method == 'Tiền mặt';
+  onBusy(true);
+  try {
+    String? invoiceId;
+    if (existing == null && preInvoiceId == null) {
+      // Khách trả luôn (không cần xem bill trước): lưu hóa đơn kèm đã thu tiền
+      invoiceId = invoiceService.newInvoiceId();
+      final saved = await invoiceService.saveInvoice({
+        ...invoiceData(method: result.method),
+        'paidAt': true,
+        if (isCash && result.cashReceived != null) 'cashReceived': result.cashReceived,
+        if (isCash && result.cashReceived != null) 'changeGiven': result.cashReceived! - total,
+        if (!isCash) 'transferConfirmed': result.transferConfirmed,
+      }, staffName: user?.fullName, staffId: user?.id, invoiceId: invoiceId);
+      if (saved == null) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Không lưu được hóa đơn, vui lòng thử lại'), backgroundColor: AppColors.error));
+        return;
+      }
+      await afterInvoiceSaved();
+    } else {
+      // Đã in bill (ngay trong màn này hoặc từ trước) → ghi nhận thu tiền vào hóa đơn đó
+      await invoiceService.recordPayment(
+        existing?['orderId']?.toString() ?? first.id,
+        method: result.method,
+        total: total,
+        cashReceived: result.cashReceived,
+        transferConfirmed: result.transferConfirmed,
+        staffId: user?.id,
+        staffName: user?.fullName,
+      );
+    }
+
+    // "Thu tiền & in bill" (khách trả luôn) → in bill sau khi thu, không kèm QR
+    if (result.printBill && invoiceId != null) {
+      try {
+        await printBill(printData(), invoiceId, false);
+      } catch (e) {
+        debugPrint('[Checkout] print error: $e');
+      }
+    }
+
+    await orderService.completeAllOrdersAndFreeTable(
+      tableId,
+      orders.where((o) => _kActive.contains(o.status)).map((o) => o.id).toList(),
+      totalAmount: total,
+      staffId: user?.id,
+      staffName: user?.fullName,
+      staffRole: user?.role,
+    );
+    // Bàn thường: reset phiên (QR bàn hết hiệu lực); mang về: giữ nguyên cho đợt sau
+    if (!isTakeaway) {
+      try {
+        await tableService.clearTable(tableId);
+      } catch (e) {
+        debugPrint('[Checkout] clearTable error: $e');
+      }
+    }
+    onDone?.call();
+    final change = isCash && result.cashReceived != null ? result.cashReceived! - total : 0.0;
+    messenger.showSnackBar(SnackBar(
+      content: Text(change > 0
+          ? 'Đã thu ${_vndFmt.format(total)}đ · thối lại ${_vndFmt.format(change)}đ'
+          : 'Đã thu ${_vndFmt.format(total)}đ (${result.method})'),
+      backgroundColor: AppColors.success,
+      duration: const Duration(seconds: 3),
+    ));
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('Lỗi thu tiền: $e'), backgroundColor: AppColors.error));
+  } finally {
+    onBusy(false);
   }
 }
 
@@ -4007,12 +4324,12 @@ class _AddProductDialogState extends State<_AddProductDialog> {
       builder: (_) => _OptionPicker(product: p, initSize: 'L', initSweet: '100%'),
     );
     if (res == null || !mounted) return;
-    final size = res['size']; final sweet = res['sweet'];
-    final key = '${p.id}_${size}_$sweet';
+    final size = res['size']; final sweet = res['sweet']; final note = res['note'] ?? '';
+    final key = '${p.id}_${size}_${sweet}_$note';
     setState(() {
       final idx = _cart.indexWhere((i) => i.cartKey == key);
       if (idx >= 0) { _cart[idx].qty++; }
-      else { _cart.add(_AddCartItem(item: p, size: size, sweetness: sweet, qty: 1, cartKey: key)); }
+      else { _cart.add(_AddCartItem(item: p, size: size, sweetness: sweet, note: note, qty: 1, cartKey: key)); }
     });
   }
 
@@ -4032,6 +4349,7 @@ class _AddProductDialogState extends State<_AddProductDialog> {
       final items = _cart.map((c) => OrderItem(
         id: c.item.id, name: c.item.name, quantity: c.qty, price: c.price,
         image: c.item.imageUrl, size: c.size, sweetness: c.sweetness,
+        note: c.note.isEmpty ? null : c.note,
       )).toList();
       await widget.onConfirm(items);
       if (mounted) Navigator.pop(context);
@@ -4253,10 +4571,11 @@ class _AddCartItem {
   final MenuItemModel item;
   final String? size;
   final String? sweetness;
+  final String note;
   int qty;
   final String cartKey;
   double get price => item.price;
-  _AddCartItem({required this.item, this.size, this.sweetness, required this.qty, required this.cartKey});
+  _AddCartItem({required this.item, this.size, this.sweetness, this.note = '', required this.qty, required this.cartKey});
 }
 
 // ── Option Picker (size + độ ngọt) — giống OptionPicker trong web ─────────────
@@ -4273,16 +4592,31 @@ class _OptionPicker extends StatefulWidget {
 class _OptionPickerState extends State<_OptionPicker> {
   late String _size = widget.initSize;
   late String _sweet = widget.initSweet;
+  final _noteCtrl = TextEditingController(); // ghi chú món: ít đá, không ống hút…
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  void _confirm() => Navigator.pop(context, {'size': _size, 'sweet': _sweet, 'note': _noteCtrl.text.trim()});
 
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      // Bàn phím bật lên (gõ ghi chú) làm chiều cao còn lại nhỏ đi → cho nội dung
+      // cuộn được thay vì tràn, 2 nút Huỷ / Thêm không bị đẩy vỡ giao diện.
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 300),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Phần nội dung cuộn được; 2 nút Huỷ / Thêm ghim cố định ở đáy
+        Flexible(child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Container(width: 48, height: 48,
@@ -4331,18 +4665,43 @@ class _OptionPickerState extends State<_OptionPicker> {
                       color: sel ? const Color(0xFFB45309) : const Color(0xFF64748B)))),
                 )));
             }).toList()),
-            const SizedBox(height: 18),
-            Row(children: [
-              Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text('Huỷ'))),
-              const SizedBox(width: 8),
-              Expanded(child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
-                onPressed: () => Navigator.pop(context, {'size': _size, 'sweet': _sweet}),
-                icon: const Icon(Icons.check, size: 14),
-                label: const Text('Thêm'))),
-            ]),
+            const SizedBox(height: 14),
+            const Text('GHI CHÚ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1, color: Color(0xFF94A3B8))),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _noteCtrl,
+              maxLines: 2,
+              minLines: 1,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _confirm(),
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'VD: ít đá, không ống hút…',
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF2563EB))),
+              ),
+            ),
+          ]),
+        )),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+          child: Row(children: [
+            Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text('Huỷ'))),
+            const SizedBox(width: 8),
+            Expanded(child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
+              onPressed: _confirm,
+              icon: const Icon(Icons.check, size: 14),
+              label: const Text('Thêm'))),
           ]),
         ),
+        ]),
       ),
     );
   }
@@ -4971,6 +5330,8 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   StreamSubscription? _invoiceSub;
   List<Map<String, dynamic>> _todayInvoices = []; // hóa đơn đã xuất trong ngày
   String? _selectedInvoiceId;
+  // Lọc mục "Đã thanh toán" theo phương thức: all | cash | transfer | grab | shopee | unpaid | excluded
+  String _billedFilter = 'all';
 
   @override
   void initState() {
@@ -5038,10 +5399,12 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         if (dt == null || dt.isBefore(todayStart)) continue;
         list.add(m);
       }
+      // Mới nhất lên đầu, theo thời điểm THANH TOÁN (paidAt — lúc thu tiền /
+      // giao tài xế); hóa đơn chưa ghi paidAt thì lấy lúc xuất bill (createdAt).
+      // So tới mili-giây, trùng thời điểm thì xếp theo id cho thứ tự ổn định.
       list.sort((a, b) {
-        final ta = a['createdAt'] is Timestamp ? (a['createdAt'] as Timestamp).seconds : 0;
-        final tb = b['createdAt'] is Timestamp ? (b['createdAt'] as Timestamp).seconds : 0;
-        return tb.compareTo(ta);
+        final c = _invSortTime(b).compareTo(_invSortTime(a));
+        return c != 0 ? c : '${b['id']}'.compareTo('${a['id']}');
       });
       if (mounted) setState(() => _todayInvoices = list);
     }, onError: (e) => debugPrint('[BOARD] invoices: $e'));
@@ -5217,7 +5580,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   // "Cài đặt máy in") thì in thẳng qua máy in nhiệt; nếu chưa cấu hình thì in qua hộp
   // thoại in hệ thống (AirPrint) như trước đây.
   Future<void> _printInvoice(String tableId, List<OrderModel> tableOrders, Map<String, dynamic> data,
-      {String? staffName, DateTime? checkInAt, String? invoiceId}) async {
+      {String? staffName, DateTime? checkInAt, String? invoiceId, bool copy = false, bool withQr = true}) async {
     final items = tableOrders.expand((o) => o.items).toList();
     final subtotal = (data['subtotal'] as num?)?.toDouble() ?? 0;
     final serviceAmount = (data['serviceAmount'] as num?)?.toDouble() ?? 0;
@@ -5237,7 +5600,8 @@ class _TableBoardTabState extends State<_TableBoardTab> {
     // Mã QR chuyển khoản (VietQR) — chỉ tải khi đã bật + cấu hình đủ tài khoản.
     await BankQrService.instance.load();
     Uint8List? qrBytes;
-    if (BankQrService.instance.shouldPrint) {
+    // withQr = false: bill in SAU khi đã thu tiền → không cần mã QR chuyển khoản
+    if (withQr && BankQrService.instance.shouldPrint) {
       try {
         final qrContent = invoiceCode != null ? 'HD $invoiceCode' : 'Ban $tableId';
         final qrUrl = BankQrService.instance.imageUrl(amount: total, content: qrContent);
@@ -5256,6 +5620,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         ReceiptLine('Hotline: 0742-619-457', fontSize: 20, align: ReceiptAlign.center),
         ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
         ReceiptLine('PHIẾU THANH TOÁN', bold: true, fontSize: 28, align: ReceiptAlign.center),
+        if (copy) ReceiptLine('(BẢN SAO)', bold: true, fontSize: 20, align: ReceiptAlign.center),
         if (invoiceCode != null || checkInStr != null)
           ReceiptLine(
             invoiceCode != null ? 'Số phiếu: #$invoiceCode' : '',
@@ -5271,7 +5636,10 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         ...items.map((it) => ReceiptLine('${it.quantity} x ${it.name}',
             mid: '${_vndFmt.format(it.price)}đ',
             right: '${_vndFmt.format(it.price * it.quantity)}đ', fontSize: 22)),
-        ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
+        // Đường kẻ mảnh chỉ cần khi có dòng phí dịch vụ / giảm giá ở giữa —
+        // không thì đã có đường kẻ đậm ngay trên TỔNG CỘNG (tránh 2 đường liền nhau)
+        if (serviceAmount > 0 || discount > 0)
+          ReceiptLine('--------------------------------', fontSize: 18, align: ReceiptAlign.center),
         if (serviceAmount > 0)
           ReceiptLine('Phí dịch vụ', right: '${_vndFmt.format(serviceAmount)}đ', fontSize: 22),
         if (discount > 0)
@@ -5307,6 +5675,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         pw.Center(child: pw.Text('Hotline: 0742-619-457', style: const pw.TextStyle(fontSize: 8))),
         pw.Divider(thickness: 1),
         pw.Center(child: pw.Text('PHIẾU THANH TOÁN', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
+        if (copy) pw.Center(child: pw.Text('(BẢN SAO)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
         pw.SizedBox(height: 4),
         if (invoiceCode != null || checkInStr != null)
           pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
@@ -5331,7 +5700,8 @@ class _TableBoardTabState extends State<_TableBoardTab> {
           pw.Expanded(flex: 2, child: pw.Text('${_vndFmt.format(it.price)}đ', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 9))),
           pw.Expanded(flex: 2, child: pw.Text('${_vndFmt.format(it.price * it.quantity)}đ', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 9))),
         ])),
-        pw.Divider(),
+        // Chỉ kẻ khi có phí dịch vụ / giảm giá — tránh 2 đường kẻ liền nhau trên TỔNG CỘNG
+        if (serviceAmount > 0 || discount > 0) pw.Divider(),
         if (serviceAmount > 0) _pdfRow('Phí dịch vụ', '${_vndFmt.format(serviceAmount)}đ'),
         if (discount > 0) _pdfRow('Giảm giá${code != null ? ' [$code]' : ''}', '-${_vndFmt.format(discount)}đ'),
         pw.Divider(thickness: 1),
@@ -5601,8 +5971,9 @@ class _TableBoardTabState extends State<_TableBoardTab> {
     // Bàn đang chọn (mặc định bàn đầu tiên)
     final selKey = (keys.contains(_selectedKey) ? _selectedKey : (keys.isNotEmpty ? keys.first : null));
     final billedView = _statusFilter == 'Đã thanh toán';
-    final selInv = _todayInvoices.where((m) => m['id'] == _selectedInvoiceId).firstOrNull
-        ?? (_todayInvoices.isNotEmpty ? _todayInvoices.first : null);
+    final billedShown = _billedInvoices;
+    final selInv = billedShown.where((m) => m['id'] == _selectedInvoiceId).firstOrNull
+        ?? (billedShown.isNotEmpty ? billedShown.first : null);
 
     // Đếm số lượng cho từng mục lọc
     int cntDatMon = 0, cntCho = 0;
@@ -5638,6 +6009,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         child: Column(children: [
           _boardFilterBar(counts),
           if (!billedView) _boardSummaryBar(cntDatMon, cntCho, pendingPaymentTotal),
+          if (billedView) _billedSummaryBar(),
           // Bàn đang gọi (phục vụ / tính tiền) nhưng CHƯA có đơn → không có thẻ bàn
           // nào để hiện banner, nên liệt kê riêng ở đây để nhân viên không bỏ sót.
           if (!billedView) ..._noOrderServiceBanners(groupBase.values.toSet()),
@@ -5665,8 +6037,9 @@ class _TableBoardTabState extends State<_TableBoardTab> {
                         // Dạng bảng: lưới thẻ nhiều cột
                         ? GridView.builder(
                             padding: const EdgeInsets.all(12),
-                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 380, mainAxisExtent: 150,
+                            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                              // Mục "Đặt Món" có thêm nút trên thẻ → thẻ cao hơn
+                              maxCrossAxisExtent: 380, mainAxisExtent: _statusFilter == 'Đặt Món' ? 196 : 150,
                               crossAxisSpacing: 8, mainAxisSpacing: 8,
                             ),
                             itemCount: entries.length,
@@ -5933,9 +6306,56 @@ class _TableBoardTabState extends State<_TableBoardTab> {
                   ? _boardChip(_findTable(base)!.serviceRequestLabel, const Color(0xFFDBEAFE), const Color(0xFF1D4ED8))
                   : _boardChip('Gọi phục vụ', const Color(0xFFFEF3C7), const Color(0xFFB45309)),
           ]),
+          // Thẻ bàn chưa pha xong (mục "Đặt Món"): nút Bắt đầu pha / Hoàn thành cả bàn.
+          // Mục "Chờ thanh toán" không có nút trên thẻ — thu tiền ở khung chi tiết bên phải.
+          if (!allDone) ...[
+            // Dạng lưới: thẻ cao cố định → đẩy nút xuống đáy; dạng danh sách: chiều
+            // cao tự do (không dùng Spacer được) → chỉ chừa khoảng cách
+            if (_gridView) const Spacer() else const SizedBox(height: 10),
+            SizedBox(
+              height: 36,
+              child: _BulkStepBtn(
+                orders: orders.where((o) => !_isDone(o.status)).toList(),
+                onUpdateStatus: _handleUpdateStatus,
+              ),
+            ),
+          ],
         ]),
       ),
     );
+  }
+
+  // Thu tiền gộp: xem bill + thu tiền + in bill + đóng bàn trong 1 màn
+  Future<void> _checkout(String key, String base, List<OrderModel> orders, bool takeaway) {
+    final staff = context.read<AuthProvider>().currentUser;
+    DateTime? checkIn;
+    for (final o in orders) {
+      final t = o.createdAt;
+      if (t != null && (checkIn == null || t.isBefore(checkIn))) checkIn = t;
+    }
+    return _runCheckout(context,
+        tableId: base,
+        title: _labelFor(key, base, orders),
+        orders: orders,
+        isTakeaway: takeaway,
+        table: _findTable(base),
+        invoiceService: _invoiceService,
+        orderService: _orderService,
+        tableService: _tableService,
+        discountService: _discountService,
+        printBill: (data, invId, withQr) => _printInvoice(base, orders, data,
+            staffName: staff?.fullName, checkInAt: checkIn, invoiceId: invId, withQr: withQr),
+        onAdvanced: () => _handleOpenPayment(context, base, orders, cardKey: key, isTakeaway: takeaway),
+        onBilled: () {
+          if (mounted) setState(() => _billedOrderIds[key] = orders.map((o) => o.id).toSet());
+        },
+        onBusy: (b) {
+          if (!mounted) return;
+          setState(() => b ? _clearingTableIds.add(key) : _clearingTableIds.remove(key));
+        },
+        onDone: () {
+          if (mounted) setState(() => _billedOrderIds.remove(key));
+        });
   }
 
   Widget _boardChip(String label, Color bg, Color fg) => Container(
@@ -5961,6 +6381,12 @@ class _TableBoardTabState extends State<_TableBoardTab> {
     return int.tryParse(tableId) != null ? 'Bàn $tableId' : tableId;
   }
 
+  // Thời điểm dùng để sắp xếp + hiển thị giờ trên thẻ hóa đơn đã thanh toán
+  static int _invSortTime(Map<String, dynamic> inv) {
+    final ts = inv['paidAt'] is Timestamp ? inv['paidAt'] : inv['createdAt'];
+    return ts is Timestamp ? ts.millisecondsSinceEpoch : 0;
+  }
+
   String _hhmm(dynamic ts) {
     final dt = ts is Timestamp ? ts.toDate() : null;
     if (dt == null) return '--:--';
@@ -5968,8 +6394,11 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   }
 
   Widget _billedList(Map<String, dynamic>? selInv) {
-    if (_todayInvoices.isEmpty) {
-      return const Center(child: Text('Chưa có hóa đơn nào hôm nay', style: TextStyle(color: AppColors.textHint)));
+    final list = _billedInvoices;
+    if (list.isEmpty) {
+      return Center(child: Text(
+          _todayInvoices.isEmpty ? 'Chưa có hóa đơn nào hôm nay' : 'Không có hóa đơn nào theo bộ lọc này',
+          style: const TextStyle(color: AppColors.textHint)));
     }
     bool isSel(Map<String, dynamic> inv) => selInv != null && selInv['id'] == inv['id'];
     if (_gridView) {
@@ -5979,16 +6408,142 @@ class _TableBoardTabState extends State<_TableBoardTab> {
           maxCrossAxisExtent: 380, mainAxisExtent: 92,
           crossAxisSpacing: 8, mainAxisSpacing: 8,
         ),
-        itemCount: _todayInvoices.length,
-        itemBuilder: (_, i) => _invoiceCard(_todayInvoices[i], isSel(_todayInvoices[i])),
+        itemCount: list.length,
+        itemBuilder: (_, i) => _invoiceCard(list[i], isSel(list[i])),
       );
     }
     return ListView.separated(
       padding: const EdgeInsets.all(12),
-      itemCount: _todayInvoices.length,
+      itemCount: list.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) => _invoiceCard(_todayInvoices[i], isSel(_todayInvoices[i])),
+      itemBuilder: (_, i) => _invoiceCard(list[i], isSel(list[i])),
     );
+  }
+
+  // Nhóm phương thức của 1 hóa đơn (dùng cho thanh tổng + bộ lọc mục Đã thanh toán)
+  static String _invMethodKey(Map<String, dynamic> inv) {
+    if (inv['status'] == 'excluded') return 'excluded';
+    final ch = OrderChannel.channelOfInvoice(inv);
+    if (ch == OrderChannel.grab) return 'grab';
+    if (ch == OrderChannel.shopee) return 'shopee';
+    final m = inv['paymentMethod']?.toString();
+    if (m == 'Tiền mặt' || m == 'cash') return 'cash';
+    if (m == 'Chuyển khoản' || m == 'transfer') return 'transfer';
+    // Đã in bill nhưng chưa ghi nhận thu tiền (chưa bấm Dọn bàn / Thu tiền)
+    if (m == null || m.isEmpty) return 'unpaid';
+    return 'other';
+  }
+
+  List<Map<String, dynamic>> get _billedInvoices => _billedFilter == 'all'
+      ? _todayInvoices
+      : _todayInvoices.where((inv) => _invMethodKey(inv) == _billedFilter).toList();
+
+  // Thanh tổng tiền theo phương thức trong ngày — chạm để lọc
+  Widget _billedSummaryBar() {
+    final sums = <String, double>{};
+    final counts = <String, int>{};
+    for (final inv in _todayInvoices) {
+      final k = _invMethodKey(inv);
+      sums[k] = (sums[k] ?? 0) + ((inv['totalAmount'] as num?)?.toDouble() ?? 0);
+      counts[k] = (counts[k] ?? 0) + 1;
+    }
+    final revenue = sums.entries
+        .where((e) => e.key != 'excluded')
+        .fold<double>(0, (s, e) => s + e.value);
+    final chips = <(String, String, Color, IconData)>[
+      ('cash', 'Tiền mặt', const Color(0xFF059669), Icons.payments_outlined),
+      ('transfer', 'Chuyển khoản', const Color(0xFF0284C7), Icons.account_balance_outlined),
+      ('grab', 'Grab', _channelColor(OrderChannel.grab), Icons.delivery_dining_rounded),
+      ('shopee', 'ShopeeFood', _channelColor(OrderChannel.shopee), Icons.delivery_dining_rounded),
+      ('unpaid', 'Chưa thu', const Color(0xFFD97706), Icons.hourglass_bottom_rounded),
+      ('other', 'Khác', const Color(0xFF64748B), Icons.more_horiz_rounded),
+      ('excluded', 'Không tính DT', const Color(0xFF94A3B8), Icons.block_rounded),
+    ];
+    Widget chip(String key, String label, Color color, IconData icon, {double? amount, int? count}) {
+      final sel = _billedFilter == key;
+      return GestureDetector(
+        onTap: () => setState(() {
+          _billedFilter = sel ? 'all' : key;
+          _selectedInvoiceId = null;
+        }),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: sel ? color : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: sel ? color : color.withValues(alpha: 0.35)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 14, color: sel ? Colors.white : color),
+            const SizedBox(width: 5),
+            Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                color: sel ? Colors.white : const Color(0xFF475569))),
+            if (amount != null) ...[
+              const SizedBox(width: 5),
+              Text('${_vndFmt.format(amount)}đ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900,
+                  color: sel ? Colors.white : color)),
+            ],
+            if (count != null)
+              Text(' · $count', style: TextStyle(fontSize: 11, color: sel ? Colors.white70 : const Color(0xFF94A3B8))),
+          ]),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      color: const Color(0xFFF8FAFC),
+      child: Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        chip('all', 'Tổng doanh thu', AppColors.primary, Icons.receipt_long_rounded,
+            amount: revenue, count: _todayInvoices.length - (counts['excluded'] ?? 0)),
+        for (final (k, label, color, icon) in chips)
+          if ((counts[k] ?? 0) > 0) chip(k, label, color, icon, amount: sums[k] ?? 0, count: counts[k]),
+      ]),
+    );
+  }
+
+  // In lại 1 bản sao hóa đơn đã thanh toán (không tạo hóa đơn mới, không đổi doanh thu)
+  Future<void> _reprintCopy(Map<String, dynamic> inv) async {
+    final items = ((inv['items'] as List?) ?? [])
+        .map((m) => OrderItem.fromMap(Map<String, dynamic>.from(m as Map)))
+        .toList();
+    final subtotal = (inv['subtotal'] as num?)?.toDouble() ??
+        items.fold<double>(0, (s, i) => s + i.price * i.quantity);
+    final tableId = inv['tableId']?.toString() ?? '';
+    final orders = [
+      OrderModel(
+        id: inv['orderId']?.toString() ?? inv['id']?.toString() ?? '',
+        tableId: tableId,
+        items: items,
+        status: 'closed',
+        totalPrice: subtotal,
+      ),
+    ];
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _printInvoice(
+        OrderChannel.isDelivery(OrderChannel.channelOfInvoice(inv)) ? _invTitle(inv) : tableId,
+        orders,
+        {
+          'subtotal': subtotal,
+          'serviceAmount': (inv['serviceAmount'] as num?)?.toDouble() ?? 0,
+          'discount': (inv['discount'] as num?)?.toDouble() ?? 0,
+          'finalTotal': (inv['totalAmount'] as num?)?.toDouble() ?? 0,
+          'discountCode': inv['discountCode'],
+        },
+        staffName: inv['staffName']?.toString(),
+        invoiceId: inv['id']?.toString(),
+        copy: true,
+      );
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Đã in bản sao hóa đơn'),
+        backgroundColor: AppColors.success,
+        duration: Duration(seconds: 2),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('In bản sao thất bại: $e'), backgroundColor: AppColors.error));
+    }
   }
 
   Widget _invoiceCard(Map<String, dynamic> inv, bool selected) {
@@ -6036,7 +6591,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
             const Icon(Icons.schedule_rounded, size: 12, color: Color(0xFF94A3B8)),
             const SizedBox(width: 4),
             Expanded(child: Text(
-                '${_hhmm(inv['createdAt'])} · $itemCount món${staff != null && staff.isNotEmpty ? ' · $staff' : ''}',
+                '${_hhmm(inv['paidAt'] is Timestamp ? inv['paidAt'] : inv['createdAt'])} · $itemCount món${staff != null && staff.isNotEmpty ? ' · $staff' : ''}',
                 maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)))),
             if (isP2) Container(
@@ -6123,6 +6678,20 @@ class _TableBoardTabState extends State<_TableBoardTab> {
             const Text('Thành tiền', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
             Text('${_vndFmt.format(total)}đ', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.primary)),
           ]),
+          const SizedBox(height: 12),
+          // In lại bản sao cho khách (không tạo hóa đơn mới, không ảnh hưởng doanh thu)
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => _reprintCopy(inv),
+              icon: const Icon(Icons.print_outlined, size: 18),
+              label: const Text('In lại bản sao', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ),
         ]),
       ),
     ]);
@@ -6212,6 +6781,15 @@ class _TableBoardTabState extends State<_TableBoardTab> {
             ),
           ]),
         ),
+      // Bàn có từ 2 đơn chưa xong → 1 nút làm cả bàn (Bắt đầu pha / Hoàn thành tất cả)
+      if (orders.where((o) => !_isDone(o.status)).length >= 2)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: _BulkStepBtn(
+            orders: orders.where((o) => !_isDone(o.status)).toList(),
+            onUpdateStatus: _handleUpdateStatus,
+          ),
+        ),
       // Danh sách đơn (tái dùng _OrderBlock)
       Expanded(
         child: ListView.separated(
@@ -6250,8 +6828,10 @@ class _TableBoardTabState extends State<_TableBoardTab> {
             const Text('Tổng cộng', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
             Text('${_vndFmt.format(net)}đ', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.primary)),
           ]),
+          // Hàng nút: Thu tiền + Dọn bàn — chỉ hiện khi bàn đã pha xong (mục "Chờ
+          // thanh toán"). Ở mục "Đặt Món" cả 2 nút đều bị khoá nên ẩn cho gọn.
+          if (allDone) ...[
           const SizedBox(height: 12),
-          // Hàng nút: Thanh toán + Dọn bàn
           Row(children: [
             Expanded(child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
@@ -6272,10 +6852,10 @@ class _TableBoardTabState extends State<_TableBoardTab> {
                               if (!mounted) return;
                               setState(() => b ? _clearingTableIds.add(key) : _clearingTableIds.remove(key));
                             })
-                      : () => _handleOpenPayment(context, base, orders, cardKey: key, isTakeaway: takeaway))
+                      : () => _checkout(key, base, orders, takeaway))
                   : null,
-              icon: Icon(orders.first.isDelivery ? Icons.delivery_dining_rounded : Icons.credit_card_rounded, size: 18),
-              label: Text(!allDone ? 'Đang pha' : orders.first.isDelivery ? 'Giao tài xế' : 'Thanh toán',
+              icon: Icon(orders.first.isDelivery ? Icons.delivery_dining_rounded : Icons.payments_rounded, size: 18),
+              label: Text(!allDone ? 'Đang pha' : orders.first.isDelivery ? 'Giao tài xế' : 'Thu tiền',
                   style: const TextStyle(fontWeight: FontWeight.w700)),
             )),
             const SizedBox(width: 8),
@@ -6295,6 +6875,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
               label: const Text('Dọn bàn', style: TextStyle(fontWeight: FontWeight.w700)),
             )),
           ]),
+          ],
         ]),
       ),
     ]);
@@ -6342,11 +6923,15 @@ class _PaymentResult {
   final double total;
   final double? cashReceived; // chỉ với tiền mặt
   final bool transferConfirmed;
+  final bool printBill; // màn Thu tiền gộp: có in bill sau khi thu không
+  final bool advanced;  // bấm "Tùy chọn khác…" → mở luồng xuất bill đầy đủ (cũ)
   const _PaymentResult({
     required this.method,
     required this.total,
     this.cashReceived,
     this.transferConfirmed = false,
+    this.printBill = false,
+    this.advanced = false,
   });
 }
 
@@ -6358,16 +6943,57 @@ class _PaymentResult {
 class _CollectPaymentDialog extends StatefulWidget {
   final String tableId;
   final double total;
-  const _CollectPaymentDialog({required this.tableId, required this.total});
+  // ── Chế độ "Thu tiền gộp" (checkout = true): xem bill + thu tiền + in bill
+  //    trong 1 màn, thay cho 2 cửa sổ "In hóa đơn" → "Thu tiền" nối nhau.
+  final bool checkout;
+  final String? title;            // vd "Bàn 01" / "Mang về • #A1B2"
+  final List<OrderItem> items;    // để xem trước bill
+  final double subtotal;
+  final double discount;
+  final String? discountCode;
+  final String? initialMethod;    // chọn sẵn theo lựa chọn khách bấm trên menu
+  final String? note;             // vd "Bàn đã in bill lúc 21:37 — chỉ ghi nhận thu tiền"
+  final bool defaultPrint;
+  // In bill đưa khách xem TRƯỚC (kèm QR chuyển khoản) — khách xem xong mới biết
+  // trả tiền mặt hay chuyển khoản. Trả về true nếu đã lưu + in thành công.
+  // null = bàn đã in bill rồi (chỉ còn bước ghi nhận thu tiền).
+  final Future<bool> Function()? onPrintBill;
+  const _CollectPaymentDialog({
+    required this.tableId,
+    required this.total,
+    this.checkout = false,
+    this.title,
+    this.items = const [],
+    this.subtotal = 0,
+    this.discount = 0,
+    this.discountCode,
+    this.initialMethod,
+    this.note,
+    this.defaultPrint = true,
+    this.onPrintBill,
+  });
 
   @override
   State<_CollectPaymentDialog> createState() => _CollectPaymentDialogState();
 }
 
 class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
-  String? _method;
+  late String? _method = widget.initialMethod;
   final _cashCtrl = TextEditingController();
   bool _transferConfirmed = false;
+  late bool _printBill = widget.defaultPrint;
+  bool _billPrinted = false;   // đã bấm "In bill cho khách xem" trong màn này
+  bool _printingBill = false;
+
+  Future<void> _printBillFirst() async {
+    setState(() => _printingBill = true);
+    final ok = await widget.onPrintBill!();
+    if (!mounted) return;
+    setState(() {
+      _printingBill = false;
+      if (ok) _billPrinted = true;
+    });
+  }
 
   double get _total => widget.total;
   double? get _cash {
@@ -6501,15 +7127,120 @@ class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
     ]);
   }
 
+  // Bill xem trước (chế độ Thu tiền gộp)
+  Widget _billPreview() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 170),
+          child: SingleChildScrollView(
+            child: Column(children: [
+              for (final it in widget.items)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('${it.quantity}× ', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFFEA580C))),
+                    Expanded(child: Text(
+                      [it.name, if (it.size != null && it.size!.isNotEmpty) it.size!, if (it.sweetness != null && it.sweetness!.isNotEmpty) it.sweetness!].join(' · '),
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)))),
+                    Text('${_vndFmt.format(it.price * it.quantity)}đ',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
+                  ]),
+                ),
+            ]),
+          ),
+        ),
+        if (widget.discount > 0) ...[
+          const Divider(height: 14),
+          Row(children: [
+            const Text('Tạm tính', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+            const Spacer(),
+            Text('${_vndFmt.format(widget.subtotal)}đ', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          ]),
+          const SizedBox(height: 2),
+          Row(children: [
+            Text('Giảm giá${widget.discountCode != null && widget.discountCode!.isNotEmpty ? ' [${widget.discountCode}]' : ''}',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF047857))),
+            const Spacer(),
+            Text('-${_vndFmt.format(widget.discount)}đ', style: const TextStyle(fontSize: 12, color: Color(0xFF047857))),
+          ]),
+        ],
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final checkout = widget.checkout;
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text('Thu tiền bàn ${widget.tableId}'),
+      title: Text(checkout ? 'Thu tiền · ${widget.title ?? 'Bàn ${widget.tableId}'}' : 'Thu tiền bàn ${widget.tableId}'),
       content: SizedBox(
         width: 400,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (checkout && widget.note != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFDE68A))),
+                child: Text(widget.note!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFB45309))),
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (checkout && widget.items.isNotEmpty) ...[
+              _billPreview(),
+              const SizedBox(height: 10),
+            ],
+            // Bước 1 (thường dùng): in bill đưa khách xem → khách chọn cách trả
+            if (checkout && widget.onPrintBill != null && !_billPrinted) ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _printingBill ? null : _printBillFirst,
+                  icon: _printingBill
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.receipt_long_rounded, size: 18),
+                  label: const Text('In bill cho khách', style: TextStyle(fontWeight: FontWeight.w800)),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 4, bottom: 10),
+                child: Text('Bill kèm mã QR chuyển khoản. Khách xem xong rồi chọn cách trả bên dưới — '
+                    'hoặc khách trả luôn thì chọn phương thức và thu tiền ngay.',
+                    style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+              ),
+            ],
+            if (checkout && _billPrinted) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF6EE7B7))),
+                child: const Row(children: [
+                  Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFF059669)),
+                  SizedBox(width: 6),
+                  Expanded(child: Text('Đã in bill. Khách trả bằng gì thì chọn bên dưới để thu tiền '
+                      '(khách chưa trả ngay thì bấm "Để sau").',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF047857)))),
+                ]),
+              ),
+              const SizedBox(height: 10),
+            ],
             Row(children: [
               const Text('Cần thu', style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
               const Spacer(),
@@ -6525,24 +7256,52 @@ class _CollectPaymentDialogState extends State<_CollectPaymentDialog> {
               const SizedBox(width: 10),
               _methodTile('Chuyển khoản', Icons.account_balance_outlined),
             ]),
+            if (checkout && widget.initialMethod != null && _method == widget.initialMethod)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Chọn sẵn theo lựa chọn của khách trên menu',
+                    style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade400, fontStyle: FontStyle.italic)),
+              ),
             if (_method == 'Tiền mặt') _cashSection(),
             if (_method == 'Chuyển khoản') _transferSection(),
+            if (checkout && widget.onPrintBill != null && !_billPrinted) ...[
+              const SizedBox(height: 6),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: _printBill,
+                onChanged: (v) => setState(() => _printBill = v),
+                title: const Text('In bill sau khi thu tiền', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ],
           ]),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Huỷ')),
+        if (checkout && !_billPrinted)
+          TextButton.icon(
+            onPressed: () => Navigator.pop(context,
+                const _PaymentResult(method: '', total: 0, advanced: true)),
+            icon: const Icon(Icons.tune_rounded, size: 16),
+            label: const Text('Tùy chọn khác…'),
+          ),
+        // Đã in bill mà khách chưa trả → "Để sau": thẻ bàn hiện "Đã xuất bill",
+        // bấm "Thu tiền" lần sau sẽ mở thẳng bước ghi nhận thu tiền.
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(_billPrinted ? 'Để sau' : 'Huỷ')),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white),
-          onPressed: _canConfirm
+          onPressed: _canConfirm && !_printingBill
               ? () => Navigator.pop(context, _PaymentResult(
                     method: _method!,
                     total: _total,
                     cashReceived: _method == 'Tiền mặt' ? _cash : null,
                     transferConfirmed: _method == 'Chuyển khoản' && _transferConfirmed,
+                    printBill: checkout && widget.onPrintBill != null && !_billPrinted && _printBill,
                   ))
               : null,
-          child: const Text('Đã thu tiền · Dọn bàn'),
+          child: Text(!checkout
+              ? 'Đã thu tiền · Dọn bàn'
+              : (widget.onPrintBill != null && !_billPrinted && _printBill) ? 'Thu tiền & in bill' : 'Đã thu tiền'),
         ),
       ],
     );

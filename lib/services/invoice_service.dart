@@ -137,6 +137,10 @@ class InvoiceService {
         if (data['paidAt'] == true) 'paidAt': Timestamp.fromDate(DateTime.now()),
         if (data['paidAt'] == true && staffId != null) 'paidById': staffId,
         if (data['paidAt'] == true && staffName != null) 'paidByName': staffName,
+        // Thu tiền ngay lúc xuất hóa đơn (màn Thu tiền gộp)
+        if (data['cashReceived'] != null) 'cashReceived': data['cashReceived'],
+        if (data['changeGiven'] != null) 'changeGiven': data['changeGiven'],
+        if (data['transferConfirmed'] != null) 'transferConfirmed': data['transferConfirmed'],
       };
       String resultId;
       if (invoiceId != null && invoiceId.isNotEmpty) {
