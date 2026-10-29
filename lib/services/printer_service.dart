@@ -11,14 +11,24 @@ enum PrinterConnType { network, bluetooth }
 /// Bluetooth. Cấu hình được lưu lại trên máy (SharedPreferences) nên chỉ cần
 /// cài đặt 1 lần cho mỗi iPad/quầy.
 class PrinterService {
-  PrinterService._();
-  static final PrinterService instance = PrinterService._();
+  PrinterService._(String prefix)
+      : _kConnType = '${prefix}_conn_type',
+        _kIp = '${prefix}_ip',
+        _kPort = '${prefix}_port',
+        _kBtAddress = '${prefix}_bt_address',
+        _kBtName = '${prefix}_bt_name';
 
-  static const _kConnType = 'printer_conn_type';
-  static const _kIp = 'printer_ip';
-  static const _kPort = 'printer_port';
-  static const _kBtAddress = 'printer_bt_address';
-  static const _kBtName = 'printer_bt_name';
+  /// Máy in hóa đơn (giữ nguyên khóa lưu cũ 'printer_*' → không mất cấu hình).
+  static final PrinterService instance = PrinterService._('printer');
+
+  /// Máy in tem dán ly (Xprinter XP-365B… — cấu hình riêng, khóa 'label_printer_*').
+  static final PrinterService label = PrinterService._('label_printer');
+
+  final String _kConnType;
+  final String _kIp;
+  final String _kPort;
+  final String _kBtAddress;
+  final String _kBtName;
 
   PrinterConnType connType = PrinterConnType.network;
   String ip = '';

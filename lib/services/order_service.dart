@@ -196,6 +196,8 @@ class OrderService {
     required List<OrderItem> items,
     String? note,
     String paymentType = 'POSTPAID',
+    String? channel,
+    String? externalOrderCode,
   }) async {
     final total = items.fold(0.0, (s, i) => s + i.subtotal);
     final usd = double.parse((total / 26000).toStringAsFixed(2));
@@ -212,8 +214,19 @@ class OrderService {
       'paymentMethod': 'counter',
       'source': 'staff_add',
       if (note != null && note.isNotEmpty) 'note': note,
+      if (channel != null) 'channel': channel,
+      if (externalOrderCode != null && externalOrderCode.isNotEmpty)
+        'externalOrderCode': externalOrderCode,
       'createdAt': FieldValue.serverTimestamp(),
     }));
     return ref.id;
+  }
+
+  /// Ghi nhận đã in tem dán ly (đếm số lần in để nhân viên biết đơn đã in chưa).
+  Future<void> markLabelPrinted(String orderId) async {
+    await writeLocal(_db.collection('orders').doc(orderId).update({
+      'labelPrintCount': FieldValue.increment(1),
+      'labelPrintedAt': FieldValue.serverTimestamp(),
+    }));
   }
 }

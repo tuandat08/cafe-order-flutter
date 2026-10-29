@@ -1,5 +1,44 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Kênh bán của đơn. null / 'dine_in' = tại quán (đơn cũ không có trường này).
+class OrderChannel {
+  static const dineIn = 'dine_in';
+  static const grab = 'grab';
+  static const shopee = 'shopee';
+
+  /// Các kênh giao hàng qua app — cần in tem dán ly.
+  static const delivery = [grab, shopee];
+
+  static bool isDelivery(String? c) => c != null && delivery.contains(c);
+
+  /// Phương thức thanh toán ghi trên hóa đơn của đơn app — app đã thu tiền
+  /// khách nên KHÔNG tính vào tiền mặt trong két (xem ShiftService).
+  static const grabPayment = 'GrabFood';
+  static const shopeePayment = 'ShopeeFood';
+
+  static String? paymentMethod(String? c) =>
+      c == grab ? grabPayment : c == shopee ? shopeePayment : null;
+
+  /// Kênh của 1 hóa đơn: đọc 'channel', hoặc suy ra từ phương thức thanh toán.
+  static String channelOfInvoice(Map<String, dynamic> inv) {
+    final c = inv['channel']?.toString();
+    if (c != null && c.isNotEmpty) return c;
+    final m = inv['paymentMethod']?.toString();
+    if (m == grabPayment) return grab;
+    if (m == shopeePayment) return shopee;
+    return dineIn;
+  }
+
+  /// Tên ngắn in lên tem / hiện trên thẻ đơn.
+  static String label(String? c) {
+    switch (c) {
+      case grab: return 'GRAB';
+      case shopee: return 'SHOPEEFOOD';
+      default: return 'TẠI QUÁN';
+    }
+  }
+}
+
 class OrderItem {
   final String id;
   final String name;
@@ -108,6 +147,12 @@ class OrderModel {
   final String? note;
   final DateTime? createdAt;
   final String? staffName;
+  /// Kênh bán: xem [OrderChannel]. null = tại quán.
+  final String? channel;
+  /// Mã đơn trên app giao hàng (vd GF-482) — tài xế đọc mã này để nhận đúng đơn.
+  final String? externalOrderCode;
+  /// Số lần đã in tem dán ly cho đơn (0 = chưa in).
+  final int labelPrintCount;
 
   OrderModel({
     required this.id,
@@ -124,7 +169,15 @@ class OrderModel {
     this.note,
     this.createdAt,
     this.staffName,
+    this.channel,
+    this.externalOrderCode,
+    this.labelPrintCount = 0,
   });
+
+  bool get isDelivery => OrderChannel.isDelivery(channel);
+
+  /// Tổng số ly (mỗi ly 1 tem).
+  int get cupCount => items.fold(0, (s, i) => s + i.quantity);
 
   factory OrderModel.fromDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -162,6 +215,9 @@ class OrderModel {
       note: data['note']?.toString(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       staffName: data['staffName']?.toString(),
+      channel: data['channel']?.toString(),
+      externalOrderCode: data['externalOrderCode']?.toString(),
+      labelPrintCount: int.tryParse('${data['labelPrintCount'] ?? 0}') ?? 0,
     );
   }
 

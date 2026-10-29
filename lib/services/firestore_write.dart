@@ -11,9 +11,13 @@ import 'package:flutter/foundation.dart';
 /// Security Rules chặn, vẫn được ném ra như cũ); mất mạng thì bỏ qua việc chờ —
 /// dữ liệu đã nằm trong hàng đợi trên máy và Firestore tự gửi lên khi có mạng lại.
 Future<void> writeLocal(Future<void> write, {Duration wait = const Duration(milliseconds: 1500)}) {
+  // Chuẩn hoá về đúng Future<void>: nơi gọi có thể truyền Future<List<void>>
+  // (vd Future.wait khi đóng nhiều đơn) — gọi .timeout() thẳng trên future đó
+  // làm văng lỗi "type '() => Null' is not a subtype of ... 'onTimeout'".
+  final Future<void> done = write.then<void>((_) {});
   // Quan sát lỗi đến MUỘN (sau khi đã thôi chờ) để không thành lỗi không ai bắt.
-  write.then((_) {}, onError: (Object e) => debugPrint('[writeLocal] ghi thất bại (muộn): $e'));
-  return write.timeout(wait, onTimeout: () {
+  done.then((_) {}, onError: (Object e) => debugPrint('[writeLocal] ghi thất bại (muộn): $e'));
+  return done.timeout(wait, onTimeout: () {
     debugPrint('[writeLocal] chưa có xác nhận từ máy chủ — đã lưu trên máy, sẽ tự đồng bộ');
   });
 }

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firestore_write.dart';
 import '../models/shift_model.dart';
+import '../models/order_model.dart' show OrderChannel;
 
 /// Dịch vụ kiểm ca / đóng ca — đối chiếu tiền mặt thực tế trong ngăn kéo với
 /// doanh thu hệ thống ghi nhận, giúp phát hiện thất thoát cuối mỗi ca.
@@ -76,7 +77,8 @@ class ShiftService {
   Map<String, dynamic> _aggregateRevenue(
     Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) {
-    double cash = 0, transfer = 0, other = 0;
+    // grab / shopee: đơn app — app đã thu tiền khách, KHÔNG có trong két.
+    double cash = 0, transfer = 0, other = 0, grab = 0, shopee = 0;
     int count = 0;
     for (final d in docs) {
       final inv = d.data();
@@ -87,6 +89,10 @@ class ShiftService {
         cash += amount;
       } else if (method == 'Chuyển khoản') {
         transfer += amount;
+      } else if (method == OrderChannel.grabPayment) {
+        grab += amount;
+      } else if (method == OrderChannel.shopeePayment) {
+        shopee += amount;
       } else {
         other += amount;
       }
@@ -96,6 +102,8 @@ class ShiftService {
       'cashRevenue': cash,
       'transferRevenue': transfer,
       'otherRevenue': other,
+      'grabRevenue': grab,
+      'shopeeRevenue': shopee,
       'invoiceCount': count,
     };
   }
@@ -187,6 +195,8 @@ class ShiftService {
       'cashRevenue': revenue['cashRevenue'],
       'transferRevenue': revenue['transferRevenue'],
       'otherRevenue': revenue['otherRevenue'],
+      'grabRevenue': revenue['grabRevenue'],
+      'shopeeRevenue': revenue['shopeeRevenue'],
       'invoiceCount': revenue['invoiceCount'],
       if (note != null && note.isNotEmpty) 'note': note,
       'status': 'closed',

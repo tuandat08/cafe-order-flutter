@@ -128,6 +128,15 @@ class InvoiceService {
         if (isPrint2) 'isPrint2': true,
         if (isPrint2) 'reason': reason,
         if (isPrint2) 'previousInvoiceId': previousInvoiceId,
+        // Đơn Grab / ShopeeFood: kênh + mã đơn app + đã thu (app thu hộ)
+        if (data['channel'] != null) 'channel': data['channel'],
+        if (data['externalOrderCode'] != null) 'externalOrderCode': data['externalOrderCode'],
+        // Chiết khấu app (%) + tiền quán thực nhận sau chiết khấu
+        if (data['commissionPercent'] != null) 'commissionPercent': data['commissionPercent'],
+        if (data['netAmount'] != null) 'netAmount': data['netAmount'],
+        if (data['paidAt'] == true) 'paidAt': Timestamp.fromDate(DateTime.now()),
+        if (data['paidAt'] == true && staffId != null) 'paidById': staffId,
+        if (data['paidAt'] == true && staffName != null) 'paidByName': staffName,
       };
       String resultId;
       if (invoiceId != null && invoiceId.isNotEmpty) {
@@ -173,6 +182,17 @@ class InvoiceService {
       if (cashReceived != null) 'changeGiven': cashReceived - total,
       if (method == 'Chuyển khoản') 'transferConfirmed': transferConfirmed,
     }));
+  }
+
+  /// Hóa đơn trong khoảng [from, to) — lọc 1 field createdAt (không cần
+  /// composite index). Dùng cho báo cáo doanh thu.
+  Future<List<Map<String, dynamic>>> getInvoicesByDateRange(DateTime from, DateTime to) async {
+    final snap = await _db
+        .collection('invoices')
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+        .where('createdAt', isLessThan: Timestamp.fromDate(to))
+        .get();
+    return snap.docs.map((d) => <String, dynamic>{'id': d.id, ...d.data()}).toList();
   }
 
   /// Cập nhật phương thức thanh toán cho hóa đơn active của đơn.

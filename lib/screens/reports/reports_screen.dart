@@ -1,8 +1,39 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
-import '../../models/order_model.dart';
-import '../../services/order_service.dart';
+import '../../models/order_model.dart' show OrderChannel;
+import '../../services/invoice_service.dart';
+
+/// 1 hóa đơn đã tính doanh thu (đọc từ collection invoices — cùng nguồn với Kiểm ca).
+class _Sale {
+  final DateTime? at;
+  final double amount;
+  final double net;     // tiền quán thực nhận (đơn app: sau chiết khấu app)
+  final String channel; // OrderChannel.dineIn | grab | shopee
+  final List<({String name, int qty})> items;
+  const _Sale(this.at, this.amount, this.net, this.channel, this.items);
+
+  static _Sale fromInvoice(Map<String, dynamic> inv) {
+    final ts = inv['createdAt'];
+    final items = <({String name, int qty})>[];
+    for (final raw in (inv['items'] as List<dynamic>? ?? [])) {
+      if (raw is! Map) continue;
+      final n = raw['name'];
+      final name = n is Map ? '${n['vi'] ?? n['en'] ?? ''}' : '${n ?? ''}';
+      final q = raw['qty'] ?? raw['quantity'];
+      items.add((name: name, qty: q is num ? q.toInt() : int.tryParse('$q') ?? 1));
+    }
+    final amount = double.tryParse('${inv['totalAmount'] ?? 0}') ?? 0;
+    return _Sale(
+      ts is Timestamp ? ts.toDate() : null,
+      amount,
+      double.tryParse('${inv['netAmount'] ?? ''}') ?? amount,
+      OrderChannel.channelOfInvoice(inv),
+      items,
+    );
+  }
+}
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -12,10 +43,10 @@ class ReportsScreen extends StatefulWidget {
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
-  final _orderService = OrderService();
+  final _invoiceService = InvoiceService();
   DateTime _from = DateTime.now().subtract(const Duration(days: 6));
   DateTime _to = DateTime.now();
-  List<OrderModel>? _orders;
+  List<_Sale>? _orders;
   bool _loading = false;
 
   @override
@@ -28,9 +59,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
     setState(() => _loading = true);
     final from = DateTime(_from.year, _from.month, _from.day);
     final to = DateTime(_to.year, _to.month, _to.day + 1);
-    final orders = await _orderService.getOrdersByDateRange(from, to);
+    // Doanh thu = hóa đơn đã ghi nhận (bỏ bản in lại bị thay thế / bill không tính doanh thu)
+    List<_Sale> sales = const [];
+    try {
+      final invoices = await _invoiceService.getInvoicesByDateRange(from, to);
+      sales = invoices
+          .where((i) => i['status'] != 'superseded' && i['status'] != 'excluded')
+          .map(_Sale.fromInvoice)
+          .toList();
+    } catch (e) {
+      debugPrint('[Reports] load invoices error: $e');
+    }
+    if (!mounted) return;
     setState(() {
-      _orders = orders.where((o) => o.status == 'paid').toList();
+      _orders = sales;
       _loading = false;
     });
   }
@@ -84,7 +126,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Widget _buildContent(NumberFormat fmt, DateFormat dateFmt) {
     final orders = _orders!;
-    final totalRevenue = orders.fold(0.0, (s, o) => s + o.totalPrice);
+    final totalRevenue = orders.fold(0.0, (s, o) => s + o.amount);
+
+    // Doanh thu theo kênh bán
+    const channels = [OrderChannel.dineIn, OrderChannel.grab, OrderChannel.shopee];
+    final byChannel = {for (final c in channels) c: (amount: 0.0, net: 0.0, count: 0)};
+    for (final o in orders) {
+      final cur = byChannel[o.channel] ?? (amount: 0.0, net: 0.0, count: 0);
+      byChannel[o.channel] = (amount: cur.amount + o.amount, net: cur.net + o.net, count: cur.count + 1);
+    }
+    final totalNet = orders.fold(0.0, (s, o) => s + o.net);
     final avgOrder = orders.isEmpty ? 0.0 : totalRevenue / orders.length;
 
     // Group by day
@@ -93,9 +144,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       dailyRevenue[dateFmt.format(d)] = 0;
     }
     for (final o in orders) {
-      if (o.createdAt != null) {
-        final key = dateFmt.format(o.createdAt!);
-        dailyRevenue[key] = (dailyRevenue[key] ?? 0) + o.totalPrice;
+      if (o.at != null) {
+        final key = dateFmt.format(o.at!);
+        dailyRevenue[key] = (dailyRevenue[key] ?? 0) + o.amount;
       }
     }
 
@@ -103,7 +154,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final Map<String, int> itemCount = {};
     for (final o in orders) {
       for (final item in o.items) {
-        itemCount[item.name] = (itemCount[item.name] ?? 0) + item.quantity;
+        itemCount[item.name] = (itemCount[item.name] ?? 0) + item.qty;
       }
     }
     final topItems = itemCount.entries.toList()
@@ -187,6 +238,40 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             const SizedBox(height: 24),
 
+            // Doanh thu theo kênh bán (tại quán / Grab / ShopeeFood)
+            const Text(
+              'Doanh thu theo kênh',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              for (final c in channels) ...[
+                if (c != channels.first) const SizedBox(width: 10),
+                Expanded(
+                  child: _ChannelCard(
+                    title: c == OrderChannel.dineIn ? 'Tại quán / mang về' : c == OrderChannel.grab ? 'Grab' : 'ShopeeFood',
+                    amount: byChannel[c]!.amount,
+                    net: byChannel[c]!.net,
+                    count: byChannel[c]!.count,
+                    share: totalRevenue > 0 ? byChannel[c]!.amount / totalRevenue : 0,
+                    color: c == OrderChannel.dineIn
+                        ? AppColors.primary
+                        : c == OrderChannel.grab ? const Color(0xFF00B14F) : const Color(0xFFEE4D2D),
+                    fmt: fmt,
+                  ),
+                ),
+              ],
+            ]),
+            const SizedBox(height: 6),
+            Text(
+              totalNet < totalRevenue
+                  ? 'Quán thực nhận sau chiết khấu app: ${fmt.format(totalNet)}đ '
+                      '(app giữ ${fmt.format(totalRevenue - totalNet)}đ).'
+                  : 'Chưa có chiết khấu app nào được ghi — cài % chiết khấu ở POS (nút Giá & chiết khấu app).',
+              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 24),
+
             // Daily chart (simple bar)
             const Text(
               'Doanh thu theo ngày',
@@ -223,6 +308,61 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   )),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ChannelCard extends StatelessWidget {
+  final String title;
+  final double amount;
+  final double net;
+  final int count;
+  final double share; // 0..1
+  final Color color;
+  final NumberFormat fmt;
+
+  const _ChannelCard({
+    required this.title,
+    required this.amount,
+    required this.net,
+    required this.count,
+    required this.share,
+    required this.color,
+    required this.fmt,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+            const SizedBox(width: 6),
+            Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+          ]),
+          const SizedBox(height: 8),
+          Text('${fmt.format(amount)}đ',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: color)),
+          Text('$count đơn · ${(share * 100).toStringAsFixed(0)}%',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+          if (net < amount)
+            Text('Thực nhận ≈ ${fmt.format(net)}đ',
+                style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: share.clamp(0.0, 1.0).toDouble(),
+              minHeight: 6,
+              color: color,
+              backgroundColor: color.withValues(alpha: 0.12),
+            ),
+          ),
+        ]),
       ),
     );
   }

@@ -14,6 +14,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/printer_service.dart';
+import '../../services/label_print_service.dart';
+import '../../services/delivery_pricing_service.dart';
 import '../../services/receipt_image_builder.dart';
 import '../../services/bank_qr_service.dart';
 import 'package:http/http.dart' as http;
@@ -56,9 +58,17 @@ class _CartEntry {
   final MenuItemModel item;
   int qty;
   String note;
-  _CartEntry({required this.item, this.qty = 1, this.note = ''});
-  double get subtotal => item.price * qty;
+  final String? size;      // chỉ chọn khi đơn Grab/ShopeeFood (in lên tem ly)
+  final String? sweetness;
+  double unitPrice;        // giá theo kênh (đơn app có thể cao hơn giá menu)
+  _CartEntry({required this.item, this.qty = 1, this.note = '', this.size, this.sweetness, double? unitPrice})
+      : unitPrice = unitPrice ?? item.price;
+  double get subtotal => unitPrice * qty;
 }
+
+// Màu nhận diện kênh giao hàng (badge trên thẻ đơn / nút chọn kênh ở POS)
+Color _channelColor(String? c) =>
+    c == OrderChannel.grab ? const Color(0xFF00B14F) : const Color(0xFFEE4D2D);
 
 // ─── Trạng thái active — giống web: hiện tất cả trừ 'closed' ───────────────────
 // Web: orders.filter(o => o.status !== 'closed'); lifecycle: pending → completed → closed
@@ -473,6 +483,10 @@ class _POSTabState extends State<_POSTab> {
   String _search = '';
   bool _submitting = false;
   double _cartWidth = 300; // độ rộng cột giỏ hàng — kéo thanh ngăn cách để chỉnh
+  // Kênh bán: tại quán (chọn bàn) hoặc giao qua app Grab / ShopeeFood (nhập mã đơn app)
+  String _channel = OrderChannel.dineIn;
+  final _extCodeCtrl = TextEditingController();
+  bool get _isDelivery => OrderChannel.isDelivery(_channel);
 
   // Bàn nào đang có đơn active (chưa hoàn thành) → tô màu trong bộ chọn bàn
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _ordersSub;
@@ -481,6 +495,7 @@ class _POSTabState extends State<_POSTab> {
   @override
   void initState() {
     super.initState();
+    DeliveryPricingService.instance.load();
     _ordersSub = activeOrdersQuery().snapshots().listen((snap) {
       final occ = <String>{};
       for (final d in snap.docs) {
@@ -498,7 +513,20 @@ class _POSTabState extends State<_POSTab> {
   @override
   void dispose() {
     _ordersSub?.cancel();
+    _extCodeCtrl.dispose();
     super.dispose();
+  }
+
+  // Đơn app gắn vào bàn "mang về" (mỗi đơn 1 thẻ riêng trên KDS); chưa có bàn
+  // mang về nào trong collection tables thì dùng id "Mang về" như đơn cũ.
+  String get _takeawayTableId =>
+      _posTables.where((t) => t.isTakeaway).firstOrNull?.id ?? 'Mang về';
+
+  // Nhãn bên phải tiêu đề giỏ hàng
+  String get _cartTargetLabel {
+    if (!_isDelivery) return _tableLabel(_tableId);
+    final code = _extCodeCtrl.text.trim();
+    return '${OrderChannel.label(_channel)}${code.isEmpty ? '' : ' • #$code'}';
   }
 
   double get _total => _cart.fold(0, (s, e) => s + e.subtotal);
@@ -531,15 +559,77 @@ class _POSTabState extends State<_POSTab> {
     setState(() { _tableId = tableId; _tablePicked = true; });
   }
 
-  void _addItem(MenuItemModel item) {
+  Future<void> _addItem(MenuItemModel item) async {
+    String? size;
+    String? sweet;
+    // Đơn Grab/ShopeeFood: chọn size + độ ngọt để in lên tem ly
+    if (_isDelivery) {
+      final res = await showDialog<Map<String, String>>(
+        context: context,
+        builder: (_) => _OptionPicker(product: item, initSize: 'L', initSweet: '100%'),
+      );
+      if (res == null || !mounted) return;
+      size = res['size'];
+      sweet = res['sweet'];
+    }
     setState(() {
-      final existing = _cart.where((e) => e.item.id == item.id).firstOrNull;
+      final existing = _cart
+          .where((e) => e.item.id == item.id && e.size == size && e.sweetness == sweet && e.note.isEmpty)
+          .firstOrNull;
       if (existing != null) {
         existing.qty++;
       } else {
-        _cart.add(_CartEntry(item: item));
+        _cart.add(_CartEntry(item: item, size: size, sweetness: sweet,
+            unitPrice: DeliveryPricingService.instance.priceFor(item.price, _channel)));
       }
     });
+  }
+
+  // Ghi chú cho 1 món (vd "ít đá, không ống hút") — in lên tem và hiện ở bếp
+  Future<void> _editNote(int idx) async {
+    final ctrl = TextEditingController(text: _cart[idx].note);
+    final res = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Ghi chú: ${_cart[idx].item.name}'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'VD: ít đá, không ống hút'),
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Huỷ')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: const Text('Lưu')),
+        ],
+      ),
+    );
+    if (res != null && mounted && idx < _cart.length) setState(() => _cart[idx].note = res.trim());
+  }
+
+  void _setChannel(String c) {
+    if (c == _channel) return;
+    setState(() {
+      _channel = c;
+      // Đổi kênh → tính lại giá các món đã có trong giỏ theo kênh mới
+      for (final e in _cart) {
+        e.unitPrice = DeliveryPricingService.instance.priceFor(e.item.price, c);
+      }
+    });
+  }
+
+  // Cài đặt % giá bán trên app (Grab / ShopeeFood)
+  Future<void> _openPricingSettings() async {
+    await DeliveryPricingService.instance.load();
+    if (!mounted) return;
+    final saved = await showDialog<bool>(context: context, builder: (_) => const _DeliveryPricingDialog());
+    if (saved == true && mounted) {
+      setState(() {
+        for (final e in _cart) {
+          e.unitPrice = DeliveryPricingService.instance.priceFor(e.item.price, _channel);
+        }
+      });
+    }
   }
 
   void _removeItem(int idx) => setState(() => _cart.removeAt(idx));
@@ -553,18 +643,33 @@ class _POSTabState extends State<_POSTab> {
 
   Future<void> _submit() async {
     if (_cart.isEmpty) return;
+    final extCode = _extCodeCtrl.text.trim();
+    if (_isDelivery && extCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Nhập mã đơn trên app (in lên tem để tài xế nhận đúng đơn)'),
+        backgroundColor: AppColors.error,
+      ));
+      return;
+    }
     setState(() => _submitting = true);
     try {
       final items = _cart.map((e) => OrderItem(
         id: e.item.id,
         name: e.item.name,
         quantity: e.qty,
-        price: e.item.price,
+        price: e.unitPrice,
         note: e.note.isEmpty ? null : e.note,
         image: e.item.imageUrl,
+        size: e.size,
+        sweetness: e.sweetness,
       )).toList();
-      await _orderService.createOrder(tableId: _tableId, items: items);
-      setState(() { _cart.clear(); _submitting = false; });
+      await _orderService.createOrder(
+        tableId: _isDelivery ? _takeawayTableId : _tableId,
+        items: items,
+        channel: _isDelivery ? _channel : null,
+        externalOrderCode: _isDelivery ? extCode : null,
+      );
+      setState(() { _cart.clear(); _submitting = false; _extCodeCtrl.clear(); });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Đã tạo đơn thành công'),
@@ -597,6 +702,39 @@ class _POSTabState extends State<_POSTab> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             color: AppColors.surface,
             child: Row(children: [
+              _ChannelChip(label: 'Tại quán', selected: _channel == OrderChannel.dineIn,
+                  color: AppColors.primary, onTap: () => _setChannel(OrderChannel.dineIn)),
+              const SizedBox(width: 6),
+              _ChannelChip(label: 'Grab', selected: _channel == OrderChannel.grab,
+                  color: _channelColor(OrderChannel.grab), onTap: () => _setChannel(OrderChannel.grab)),
+              const SizedBox(width: 6),
+              _ChannelChip(label: 'ShopeeFood', selected: _channel == OrderChannel.shopee,
+                  color: _channelColor(OrderChannel.shopee), onTap: () => _setChannel(OrderChannel.shopee)),
+              IconButton(
+                icon: const Icon(Icons.price_change_outlined, size: 20),
+                color: AppColors.textSecondary,
+                tooltip: 'Giá & chiết khấu app',
+                visualDensity: VisualDensity.compact,
+                onPressed: _openPricingSettings,
+              ),
+              const SizedBox(width: 4),
+              if (_isDelivery)
+                Expanded(
+                  child: TextField(
+                    controller: _extCodeCtrl,
+                    textCapitalization: TextCapitalization.characters,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: 'Mã đơn trên app (vd GF-482)',
+                      prefixIcon: Icon(Icons.delivery_dining_rounded, size: 18, color: _channelColor(_channel)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+              // Vẫn giữ StreamBuilder bàn (ẩn) để cache danh sách bàn (cần id bàn mang về)
+              Offstage(offstage: _isDelivery, child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Text('Bàn: ', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
               const SizedBox(width: 8),
               StreamBuilder<List<TableModel>>(
@@ -676,6 +814,7 @@ class _POSTabState extends State<_POSTab> {
               ),
               const SizedBox(width: 12),
               const Text('Chạm để đổi bàn', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+              ])),
             ]),
           ),
           const Divider(height: 1),
@@ -800,7 +939,8 @@ class _POSTabState extends State<_POSTab> {
               const SizedBox(width: 8),
               const Text('Giỏ hàng', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
               const Spacer(),
-              Text(_tableLabel(_tableId), style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 13)),
+              Flexible(child: Text(_cartTargetLabel, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: _isDelivery ? _channelColor(_channel) : AppColors.primary, fontWeight: FontWeight.w600, fontSize: 13))),
             ]),
           ),
           const Divider(height: 1),
@@ -854,6 +994,7 @@ class _POSTabState extends State<_POSTab> {
                       onDismissed: (_) => _removeItem(i),
                       child: _CartRow(
                         entry: _cart[i],
+                        onEditNote: () => _editNote(i),
                         onRemove: () => _removeItem(i),
                         onQtyChange: (d) => _changeQty(i, d),
                       ),
@@ -1117,11 +1258,141 @@ class _MenuCard extends StatelessWidget {
 }
 
 // ── Cart Row ──────────────────────────────────────────────────────────────────
+// ── Cài đặt % giá bán trên app ───────────────────────────────────────────────
+class _DeliveryPricingDialog extends StatefulWidget {
+  const _DeliveryPricingDialog();
+  @override
+  State<_DeliveryPricingDialog> createState() => _DeliveryPricingDialogState();
+}
+
+class _DeliveryPricingDialogState extends State<_DeliveryPricingDialog> {
+  final _svc = DeliveryPricingService.instance;
+  late final _grabCtrl = TextEditingController(text: _fmtPct(_svc.grabPercent));
+  late final _shopeeCtrl = TextEditingController(text: _fmtPct(_svc.shopeePercent));
+  late final _grabFeeCtrl = TextEditingController(text: _fmtPct(_svc.grabCommission));
+  late final _shopeeFeeCtrl = TextEditingController(text: _fmtPct(_svc.shopeeCommission));
+
+  static String _fmtPct(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
+  static double _parse(String s, {double max = 200}) =>
+      (double.tryParse(s.trim().replaceAll(',', '.')) ?? 0).clamp(0, max).toDouble();
+
+  @override
+  void dispose() {
+    _grabCtrl.dispose();
+    _shopeeCtrl.dispose();
+    _grabFeeCtrl.dispose();
+    _shopeeFeeCtrl.dispose();
+    super.dispose();
+  }
+
+  Widget _pctField(TextEditingController ctrl, String label, {String? helper}) => TextField(
+        controller: ctrl,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        onChanged: (_) => setState(() {}),
+        decoration: InputDecoration(labelText: label, suffixText: '%', helperText: helper, isDense: true),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    const example = 30000.0;
+    String sample(TextEditingController markup, TextEditingController fee) {
+      final m = _parse(markup.text);
+      final price = m <= 0 ? example : ((example * (1 + m / 100)) / 1000).ceil() * 1000.0;
+      final net = (price * (1 - _parse(fee.text, max: 100) / 100)).roundToDouble();
+      return 'Món ${_vndFmt.format(example)}đ → bán ${_vndFmt.format(price)}đ, quán nhận ≈ ${_vndFmt.format(net)}đ';
+    }
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Giá & chiết khấu app'),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text(
+                '• Cộng giá: % cộng vào giá menu khi tạo đơn app (làm tròn lên 1.000đ).\n'
+                '• Chiết khấu: % app thu của quán — dùng để báo cáo tiền quán thực nhận.',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            const SizedBox(height: 14),
+            for (final (label, markup, fee, color) in [
+              ('Grab', _grabCtrl, _grabFeeCtrl, _channelColor(OrderChannel.grab)),
+              ('ShopeeFood', _shopeeCtrl, _shopeeFeeCtrl, _channelColor(OrderChannel.shopee)),
+            ]) ...[
+              Row(children: [
+                Icon(Icons.delivery_dining_rounded, color: color, size: 20),
+                const SizedBox(width: 6),
+                Text(label, style: TextStyle(fontWeight: FontWeight.w800, color: color)),
+              ]),
+              const SizedBox(height: 6),
+              Row(children: [
+                Expanded(child: _pctField(markup, 'Cộng giá')),
+                const SizedBox(width: 10),
+                Expanded(child: _pctField(fee, 'Chiết khấu app')),
+              ]),
+              const SizedBox(height: 4),
+              Text(sample(markup, fee), style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+              const SizedBox(height: 14),
+            ],
+            const Text('Cài đặt lưu trên máy này — iPad khác cần cài riêng. Chiết khấu được ghi kèm '
+                'từng hóa đơn lúc giao tài xế nên báo cáo xem ở máy nào cũng đúng.',
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Huỷ')),
+        ElevatedButton(
+          onPressed: () async {
+            await _svc.save(
+              grab: _parse(_grabCtrl.text),
+              shopee: _parse(_shopeeCtrl.text),
+              grabFee: _parse(_grabFeeCtrl.text, max: 100),
+              shopeeFee: _parse(_shopeeFeeCtrl.text, max: 100),
+            );
+            if (context.mounted) Navigator.pop(context, true);
+          },
+          child: const Text('Lưu'),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Nút chọn kênh bán ở POS (Tại quán / Grab / ShopeeFood) ─────────────────
+class _ChannelChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+  const _ChannelChip({required this.label, required this.selected, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? color : AppColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: selected ? color : AppColors.divider),
+        ),
+        child: Text(label, style: TextStyle(
+          fontSize: 12, fontWeight: FontWeight.w700,
+          color: selected ? Colors.white : AppColors.textSecondary,
+        )),
+      ),
+    );
+  }
+}
+
 class _CartRow extends StatelessWidget {
   final _CartEntry entry;
   final VoidCallback onRemove;
   final void Function(int delta) onQtyChange;
-  const _CartRow({required this.entry, required this.onRemove, required this.onQtyChange});
+  final VoidCallback onEditNote;
+  const _CartRow({required this.entry, required this.onRemove, required this.onQtyChange, required this.onEditNote});
 
   @override
   Widget build(BuildContext context) {
@@ -1144,8 +1415,21 @@ class _CartRow extends StatelessWidget {
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(entry.item.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary),
             maxLines: 1, overflow: TextOverflow.ellipsis),
+        if (entry.size != null || entry.sweetness != null)
+          Text([if (entry.size != null) 'Size ${entry.size}', if (entry.sweetness != null) 'Đường ${entry.sweetness}'].join(' · '),
+              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        if (entry.note.isNotEmpty)
+          Text('Ghi chú: ${entry.note}', maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, color: AppColors.error, fontStyle: FontStyle.italic)),
         Text('${_vndFmt.format(entry.subtotal)}đ', style: const TextStyle(color: AppColors.primary, fontSize: 12)),
       ])),
+      GestureDetector(
+        onTap: onEditNote,
+        child: const Padding(
+          padding: EdgeInsets.only(right: 6),
+          child: Icon(Icons.edit_note_rounded, size: 20, color: AppColors.textSecondary),
+        ),
+      ),
       _QtyBtn(icon: Icons.remove, onTap: () => onQtyChange(-1)),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1700,6 +1984,22 @@ class _KDSTabState extends State<_KDSTab> {
     await Printing.layoutPdf(onLayout: (format) async => doc.save());
   }
 
+  // In tem dán ly cho đơn Grab / ShopeeFood (bấm sau khi pha xong).
+  Future<void> _handlePrintLabels(BuildContext ctx, OrderModel order) =>
+      _printOrderLabels(ctx, order, _orderService);
+
+  // Đơn Grab / ShopeeFood: giao tài xế → ghi hóa đơn kênh app + đóng đơn.
+  Future<void> _handleDeliveryHandover(BuildContext ctx, String tableId, List<OrderModel> orders, String cardKey) =>
+      _completeDeliveryOrder(ctx,
+          tableId: tableId,
+          orders: orders,
+          orderService: _orderService,
+          invoiceService: _invoiceService,
+          onBusy: (b) {
+            if (!mounted) return;
+            setState(() => b ? _clearingTableIds.add(cardKey) : _clearingTableIds.remove(cardKey));
+          });
+
   // Tương đương handleCompleteTable + executeClearTable trong web — dọn bàn
   // Web: requireReason: !isBilled (chưa bill → lý do; đã bill → chọn PTTT)
   Future<void> _handleCompleteTable(
@@ -1910,7 +2210,7 @@ class _KDSTabState extends State<_KDSTab> {
         final Map<String, String> groupBase = {}; // cardKey -> id bàn thật (cho thao tác)
         for (final o in allOrders) {
           final base = _canonTableId(o.tableId);
-          final takeaway = _isTakeawayTable(base);
+          final takeaway = _isTakeawayTable(base) || o.isDelivery;
           final key = takeaway ? '$base${o.id}' : base;
           groupedOrders.putIfAbsent(key, () => []).add(o);
           groupBase[key] = base;
@@ -1990,7 +2290,8 @@ class _KDSTabState extends State<_KDSTab> {
                       final cardKey     = entry.key;
                       final tableId     = groupBase[cardKey] ?? cardKey; // id bàn thật cho thao tác
                       final tableOrders = entry.value;
-                      final takeaway    = _isTakeawayTable(tableId) && cardKey != tableId;
+                      final takeaway    = cardKey != tableId; // thẻ riêng từng đơn (mang về / Grab / ShopeeFood)
+                      final firstOrder  = tableOrders.first;
                       final tableTotal  = tableOrders.fold(0.0, (s, o) => s + o.totalPrice);
                       final isAllCompleted = tableOrders.every((o) => _isDone(o.status));
                       final isClearing = _clearingTableIds.contains(cardKey);
@@ -1998,8 +2299,11 @@ class _KDSTabState extends State<_KDSTab> {
                       final isBilled   = takeaway ? _billedOrderIds.containsKey(cardKey) : _isBilled(tableId, tableOrders);
                       final hasServiceRequest = takeaway ? false : _hasServiceRequest(tableId);
                       // Nhãn thẻ: bàn thường hiện "Bàn: 03"; takeaway hiện "Mang về • #<mã đơn>"
-                      final String? displayLabel = takeaway
-                          ? 'Mang về • #${tableOrders.first.id.length > 4 ? tableOrders.first.id.substring(tableOrders.first.id.length - 4) : tableOrders.first.id}'
+                      // Đơn app: "GRAB • #GF-482" (mã đơn trên app để đối chiếu với tài xế)
+                      final String? displayLabel = firstOrder.isDelivery
+                          ? '${OrderChannel.label(firstOrder.channel)} • #${firstOrder.externalOrderCode ?? ''}'
+                          : takeaway
+                          ? 'Mang về • #${firstOrder.id.length > 4 ? firstOrder.id.substring(firstOrder.id.length - 4) : firstOrder.id}'
                           : null;
 
                       return SizedBox(
@@ -2018,11 +2322,14 @@ class _KDSTabState extends State<_KDSTab> {
                           showDiscount: !takeaway,
                           menuCache: _menuCache,
                           onUpdateStatus: _handleUpdateStatus,
-                          onPayment: () => _handleOpenPayment(ctx, tableId, tableOrders, cardKey: cardKey, isTakeaway: takeaway),
+                          onPayment: firstOrder.isDelivery
+                              ? () => _handleDeliveryHandover(ctx, tableId, tableOrders, cardKey)
+                              : () => _handleOpenPayment(ctx, tableId, tableOrders, cardKey: cardKey, isTakeaway: takeaway),
                           onClearTable: () => _handleCompleteTable(ctx, tableId, tableOrders, isBilled: isBilled, cardKey: cardKey, isTakeaway: takeaway),
                           onViewDetail: () => _showDetailDialog(ctx, tableId, tableOrders),
                           onAddProduct: () => _showAddProductDialog(ctx, tableId),
                           onEditOrder: (order) => _showEditOrderDialog(ctx, order),
+                          onPrintLabels: (order) => _handlePrintLabels(ctx, order),
                           onPickDiscount: () => _showDiscountPicker(ctx, tableId, orderTotal: tableTotal),
                           onClearServiceRequest: () => _handleClearServiceRequest(tableId),
                         ),
@@ -2100,6 +2407,7 @@ class _TableCard extends StatelessWidget {
   final VoidCallback onViewDetail;
   final VoidCallback onAddProduct;
   final void Function(OrderModel order) onEditOrder;
+  final Future<void> Function(OrderModel order)? onPrintLabels;
   final VoidCallback onPickDiscount;
   final VoidCallback onClearServiceRequest;
 
@@ -2122,6 +2430,7 @@ class _TableCard extends StatelessWidget {
     required this.onViewDetail,
     required this.onAddProduct,
     required this.onEditOrder,
+    this.onPrintLabels,
     required this.onPickDiscount,
     required this.onClearServiceRequest,
   });
@@ -2175,8 +2484,11 @@ class _TableCard extends StatelessWidget {
             // Hàng 1: icon bàn + tên bàn + 4 nút
             Row(children: [
               // Giống web: Armchair icon màu emerald khi isBilled
-              Icon(Icons.chair_rounded, size: 18,
-                  color: isBilled ? const Color(0xFF10B981) : const Color(0xFF94A3B8)),
+              if (tableOrders.first.isDelivery)
+                Icon(Icons.delivery_dining_rounded, size: 18, color: _channelColor(tableOrders.first.channel))
+              else
+                Icon(Icons.chair_rounded, size: 18,
+                    color: isBilled ? const Color(0xFF10B981) : const Color(0xFF94A3B8)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(displayLabel ?? 'Bàn: $tableId', style: const TextStyle(
@@ -2185,8 +2497,8 @@ class _TableCard extends StatelessWidget {
               ),
               // Nút Thanh toán (CreditCard) — disabled nếu chưa xong
               _HeaderActionBtn(
-                label: !isAllCompleted ? 'Đang pha' : 'Thanh toán',
-                icon: Icons.credit_card_rounded,
+                label: !isAllCompleted ? 'Đang pha' : tableOrders.first.isDelivery ? 'Giao tài xế' : 'Thanh toán',
+                icon: tableOrders.first.isDelivery ? Icons.delivery_dining_rounded : Icons.credit_card_rounded,
                 enabled: isAllCompleted && !isClearing,
                 enabledColor: const Color(0xFF2563EB),
                 enabledBg: const Color(0xFFEFF6FF),
@@ -2293,6 +2605,7 @@ class _TableCard extends StatelessWidget {
               menuCache: menuCache,
               onUpdateStatus: onUpdateStatus,
               onEdit: () => onEditOrder(tableOrders[i]),
+              onPrintLabels: onPrintLabels == null ? null : () => onPrintLabels!(tableOrders[i]),
             ),
           ),
         ),
@@ -2407,8 +2720,9 @@ class _OrderBlock extends StatelessWidget {
   final Map<String, MenuItemModel> menuCache;
   final void Function(String orderId, String status) onUpdateStatus;
   final VoidCallback onEdit;
+  final Future<void> Function()? onPrintLabels;
 
-  const _OrderBlock({required this.order, required this.menuCache, required this.onUpdateStatus, required this.onEdit});
+  const _OrderBlock({required this.order, required this.menuCache, required this.onUpdateStatus, required this.onEdit, this.onPrintLabels});
 
   @override
   Widget build(BuildContext context) {
@@ -2456,6 +2770,10 @@ class _OrderBlock extends StatelessWidget {
           Expanded(
             child: Wrap(spacing: 6, runSpacing: 4, children: [
               _Badge(label: statusLabel, bg: statusBg, textColor: statusText),
+              if (order.isDelivery)
+                _Badge(
+                  label: '${OrderChannel.label(order.channel)} #${order.externalOrderCode ?? ''}',
+                  bg: _channelColor(order.channel), textColor: Colors.white),
               // Giống web: staff_add → "✦ Thêm tại quầy" (tím), ngược lại → payment badge
               if (isStaffAdd)
                 _Badge(label: '✦ Thêm tại quầy', bg: const Color(0xFFEDE9FE), textColor: const Color(0xFF6D28D9))
@@ -2598,6 +2916,15 @@ class _OrderBlock extends StatelessWidget {
             child: _HoanThanhBtn(order: order, onUpdateStatus: onUpdateStatus),
           ),
         ],
+
+        // Đơn Grab / ShopeeFood đã pha xong → nút "In tem" (mỗi ly 1 tem dán)
+        if (order.isDelivery && _isDone(order.status) && onPrintLabels != null) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: _PrintLabelBtn(order: order, onTap: onPrintLabels!),
+          ),
+        ],
       ]),
     );
   }
@@ -2651,6 +2978,265 @@ class _HoanThanhBtnState extends State<_HoanThanhBtn> {
           Text(_btnLabel, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
         ]),
       ),
+    );
+  }
+}
+
+// ── In tem dán ly (dùng chung KDS + Sơ đồ bàn) ────────────────────────────────
+// Lần đầu: in tất cả các ly. Đã in rồi: mở hộp chọn ly để in lại.
+Future<void> _printOrderLabels(BuildContext context, OrderModel order, OrderService orderService) async {
+  final all = LabelPrintService.allCups(order);
+  if (all.isEmpty) return;
+  var cups = all;
+  if (order.labelPrintCount > 0) {
+    final picked = await showDialog<List<CupLabelRef>>(
+      context: context,
+      builder: (_) => _CupLabelPickerDialog(order: order, cups: all),
+    );
+    if (picked == null || picked.isEmpty || !context.mounted) return;
+    cups = picked;
+  }
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final n = await LabelPrintService.instance.printOrder(order, cups: cups);
+    try {
+      await orderService.markLabelPrinted(order.id);
+    } catch (e) {
+      debugPrint('[Label] markLabelPrinted error: $e');
+    }
+    messenger.showSnackBar(SnackBar(
+      content: Text('Đã in $n tem cho đơn #${order.externalOrderCode ?? ''}'),
+      backgroundColor: AppColors.success,
+      duration: const Duration(seconds: 2),
+    ));
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(
+      content: Text('In tem thất bại: ${e.toString().replaceFirst('Exception: ', '')}'),
+      backgroundColor: AppColors.error,
+      duration: const Duration(seconds: 4),
+    ));
+  }
+}
+
+// ── Giao đơn app cho tài xế (dùng chung KDS + Sơ đồ bàn) ──────────────────────
+// Grab / ShopeeFood đã thu tiền khách → ghi hóa đơn với phương thức 'GrabFood' /
+// 'ShopeeFood' (tính doanh thu theo kênh, KHÔNG cộng vào tiền mặt trong két) rồi
+// đóng đơn. Đơn bị huỷ (tài xế không tới…) thì dùng "Dọn bàn" như cũ.
+Future<void> _completeDeliveryOrder(
+  BuildContext context, {
+  required String tableId,
+  required List<OrderModel> orders,
+  required OrderService orderService,
+  required InvoiceService invoiceService,
+  required void Function(bool busy) onBusy,
+}) async {
+  if (orders.isEmpty) return;
+  final first = orders.first;
+  final channelLabel = OrderChannel.label(first.channel);
+  final code = first.externalOrderCode ?? '';
+  final total = orders.fold<double>(0, (s, o) => s + o.totalPrice - o.discountAmount);
+  final notPrinted = orders.any((o) => o.labelPrintCount == 0);
+
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (dCtx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('Giao đơn $channelLabel #$code?'),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Tổng đơn: ${_vndFmt.format(total)}đ',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        Text('Ghi doanh thu kênh $channelLabel. App đã thu tiền khách nên KHÔNG tính vào tiền mặt trong két.',
+            style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+        if (notPrinted) ...[
+          const SizedBox(height: 10),
+          const Row(children: [
+            Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFD97706)),
+            SizedBox(width: 6),
+            Expanded(child: Text('Đơn này chưa in tem dán ly.',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFD97706)))),
+          ]),
+        ],
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Huỷ')),
+        ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(backgroundColor: _channelColor(first.channel), foregroundColor: Colors.white),
+          onPressed: () => Navigator.pop(dCtx, true),
+          icon: const Icon(Icons.delivery_dining_rounded, size: 18),
+          label: const Text('Đã giao tài xế'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+
+  final currentUser = context.read<AuthProvider>().currentUser;
+  final messenger = ScaffoldMessenger.of(context);
+  onBusy(true);
+  try {
+    await DeliveryPricingService.instance.load();
+    final fee = DeliveryPricingService.instance.commissionFor(first.channel);
+    final net = (total * (1 - fee / 100)).roundToDouble();
+    final invId = await invoiceService.saveInvoice({
+      'orderId': first.id,
+      'tableId': tableId,
+      'items': orders.expand((o) => o.items.map((i) => i.toMap())).toList(),
+      'subtotal': orders.fold<double>(0, (s, o) => s + o.totalPrice),
+      'discount': orders.fold<double>(0, (s, o) => s + o.discountAmount),
+      'totalAmount': total,
+      'paymentMethod': OrderChannel.paymentMethod(first.channel),
+      'channel': first.channel,
+      'externalOrderCode': code,
+      'commissionPercent': fee,
+      'netAmount': net,
+      'paidAt': true,
+    }, staffName: currentUser?.fullName, staffId: currentUser?.id);
+    if (invId == null) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Không lưu được hóa đơn đơn app, vui lòng thử lại'),
+        backgroundColor: AppColors.error));
+      return;
+    }
+    await orderService.completeAllOrdersAndFreeTable(
+      tableId,
+      orders.where((o) => _kActive.contains(o.status)).map((o) => o.id).toList(),
+      totalAmount: total,
+      staffId: currentUser?.id,
+      staffName: currentUser?.fullName,
+      staffRole: currentUser?.role,
+    );
+    messenger.showSnackBar(SnackBar(
+      content: Text('Đã giao đơn $channelLabel #$code'),
+      backgroundColor: AppColors.success,
+      duration: const Duration(seconds: 2),
+    ));
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error));
+  } finally {
+    onBusy(false);
+  }
+}
+
+// ── Nút In tem (đơn giao qua app) ─────────────────────────────────────────────
+class _PrintLabelBtn extends StatefulWidget {
+  final OrderModel order;
+  final Future<void> Function() onTap;
+  const _PrintLabelBtn({required this.order, required this.onTap});
+
+  @override
+  State<_PrintLabelBtn> createState() => _PrintLabelBtnState();
+}
+
+class _PrintLabelBtnState extends State<_PrintLabelBtn> {
+  bool _loading = false;
+
+  Future<void> _tap() async {
+    setState(() => _loading = true);
+    try {
+      await widget.onTap();
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final printed = widget.order.labelPrintCount > 0;
+    final n = widget.order.cupCount;
+    final color = _channelColor(widget.order.channel);
+    return GestureDetector(
+      onTap: _loading ? null : _tap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: printed ? Colors.white : color,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color),
+        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          if (_loading)
+            SizedBox(width: 14, height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: printed ? color : Colors.white))
+          else
+            Icon(Icons.local_offer_rounded, size: 14, color: printed ? color : Colors.white),
+          const SizedBox(width: 6),
+          Text(printed ? 'In lại tem ($n ly) · đã in ${widget.order.labelPrintCount} lần' : 'In tem ($n ly)',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: printed ? color : Colors.white)),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Hộp chọn ly để in lại tem ─────────────────────────────────────────────────
+class _CupLabelPickerDialog extends StatefulWidget {
+  final OrderModel order;
+  final List<CupLabelRef> cups;
+  const _CupLabelPickerDialog({required this.order, required this.cups});
+
+  @override
+  State<_CupLabelPickerDialog> createState() => _CupLabelPickerDialogState();
+}
+
+class _CupLabelPickerDialogState extends State<_CupLabelPickerDialog> {
+  late final Set<int> _sel = widget.cups.map((c) => c.cupIndex).toSet();
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.cups.length;
+    final allSel = _sel.length == total;
+    return AlertDialog(
+      title: Text('In lại tem #${widget.order.externalOrderCode ?? ''}'),
+      content: SizedBox(
+        width: 360,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Tất cả các ly', style: TextStyle(fontWeight: FontWeight.w700)),
+            value: allSel,
+            onChanged: (v) => setState(() {
+              if (v == true) {
+                _sel.addAll(widget.cups.map((c) => c.cupIndex));
+              } else {
+                _sel.clear();
+              }
+            }),
+          ),
+          const Divider(height: 1),
+          Flexible(
+            child: ListView(shrinkWrap: true, children: [
+              for (final c in widget.cups)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text('${c.cupIndex}/$total · ${widget.order.items[c.itemIndex].name}'),
+                  subtitle: LabelPrintService.itemOptions(widget.order.items[c.itemIndex]) == null
+                      ? null
+                      : Text(LabelPrintService.itemOptions(widget.order.items[c.itemIndex])!),
+                  value: _sel.contains(c.cupIndex),
+                  onChanged: (v) => setState(() {
+                    if (v == true) {
+                      _sel.add(c.cupIndex);
+                    } else {
+                      _sel.remove(c.cupIndex);
+                    }
+                  }),
+                ),
+            ]),
+          ),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Huỷ')),
+        ElevatedButton.icon(
+          onPressed: _sel.isEmpty
+              ? null
+              : () => Navigator.pop(context, widget.cups.where((c) => _sel.contains(c.cupIndex)).toList()),
+          icon: const Icon(Icons.print, size: 16),
+          label: Text('In ${_sel.length} tem'),
+        ),
+      ],
     );
   }
 }
@@ -4976,7 +5562,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
     final groupBase = <String, String>{};
     for (final o in _activeOrders) {
       final base = _canonTableId(o.tableId);
-      final takeaway = _isTakeawayTable(base);
+      final takeaway = _isTakeawayTable(base) || o.isDelivery;
       final key = takeaway ? '$base@@${o.id}' : base;
       grouped.putIfAbsent(key, () => []).add(o);
       groupBase[key] = base;
@@ -5249,6 +5835,10 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   }
 
   String _labelFor(String key, String base, List<OrderModel> orders) {
+    final first = orders.first;
+    if (first.isDelivery) {
+      return '${OrderChannel.label(first.channel)} • #${first.externalOrderCode ?? ''}';
+    }
     final takeaway = _isTakeawayTable(base) && key != base;
     if (takeaway) {
       final id = orders.first.id;
@@ -5355,6 +5945,16 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   );
 
   // ── Mục "Đã xuất bill": danh sách hóa đơn trong NGÀY HIỆN TẠI ──
+  // Nhãn hóa đơn: đơn app → "GRAB #GF-482"; còn lại → tên bàn
+  String _invTitle(Map<String, dynamic> inv) {
+    final ch = OrderChannel.channelOfInvoice(inv);
+    if (OrderChannel.isDelivery(ch)) {
+      final code = inv['externalOrderCode']?.toString() ?? '';
+      return '${OrderChannel.label(ch)}${code.isEmpty ? '' : ' #$code'}';
+    }
+    return _invLabel(inv['tableId']?.toString() ?? '');
+  }
+
   String _invLabel(String tableId) {
     if (tableId == 'Mang về') return 'Mang về';
     if (tableId.isEmpty) return 'Bàn ?';
@@ -5392,7 +5992,8 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   }
 
   Widget _invoiceCard(Map<String, dynamic> inv, bool selected) {
-    final tableId = inv['tableId']?.toString() ?? '';
+    final channel = OrderChannel.channelOfInvoice(inv);
+    final isApp = OrderChannel.isDelivery(channel);
     final total = (inv['totalAmount'] as num?)?.toDouble() ?? 0;
     final staff = inv['staffName']?.toString();
     final items = (inv['items'] as List?) ?? [];
@@ -5414,9 +6015,17 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            const Icon(Icons.receipt_long_rounded, size: 18, color: Color(0xFF10B981)),
+            // Icon theo kênh: Grab (xanh lá) / ShopeeFood (cam) / tại quán (hóa đơn)
+            if (isApp)
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(color: _channelColor(channel), borderRadius: BorderRadius.circular(6)),
+                child: const Icon(Icons.delivery_dining_rounded, size: 14, color: Colors.white),
+              )
+            else
+              const Icon(Icons.receipt_long_rounded, size: 18, color: Color(0xFF10B981)),
             const SizedBox(width: 6),
-            Expanded(child: Text(_invLabel(tableId),
+            Expanded(child: Text(_invTitle(inv),
                 maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)))),
             Text('${_vndFmt.format(total)}đ',
@@ -5442,7 +6051,6 @@ class _TableBoardTabState extends State<_TableBoardTab> {
   }
 
   Widget _billedDetail(Map<String, dynamic> inv) {
-    final tableId = inv['tableId']?.toString() ?? '';
     final staff = inv['staffName']?.toString();
     final subtotal = (inv['subtotal'] as num?)?.toDouble() ?? 0;
     final discount = (inv['discount'] as num?)?.toDouble() ?? 0;
@@ -5457,7 +6065,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         color: AppColors.surface,
         child: Row(children: [
-          Expanded(child: Text('${_invLabel(tableId)} • ${_hhmm(inv['createdAt'])}',
+          Expanded(child: Text('${_invTitle(inv)} • ${_hhmm(inv['createdAt'])}',
               maxLines: 1, overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)))),
           if (staff != null && staff.isNotEmpty)
@@ -5615,6 +6223,7 @@ class _TableBoardTabState extends State<_TableBoardTab> {
             menuCache: _menuCache,
             onUpdateStatus: _handleUpdateStatus,
             onEdit: () => _showEditOrderDialog(context, orders[i]),
+            onPrintLabels: () => _printOrderLabels(context, orders[i], _orderService),
           ),
         ),
       ),
@@ -5652,10 +6261,22 @@ class _TableBoardTabState extends State<_TableBoardTab> {
                 disabledBackgroundColor: const Color(0xFFCBD5E1),
               ),
               onPressed: (allDone && !isClearing)
-                  ? () => _handleOpenPayment(context, base, orders, cardKey: key, isTakeaway: takeaway)
+                  ? (orders.first.isDelivery
+                      // Đơn Grab / ShopeeFood: app đã thu tiền → giao tài xế, không thu tại quầy
+                      ? () => _completeDeliveryOrder(context,
+                            tableId: base,
+                            orders: orders,
+                            orderService: _orderService,
+                            invoiceService: _invoiceService,
+                            onBusy: (b) {
+                              if (!mounted) return;
+                              setState(() => b ? _clearingTableIds.add(key) : _clearingTableIds.remove(key));
+                            })
+                      : () => _handleOpenPayment(context, base, orders, cardKey: key, isTakeaway: takeaway))
                   : null,
-              icon: const Icon(Icons.credit_card_rounded, size: 18),
-              label: Text(allDone ? 'Thanh toán' : 'Đang pha', style: const TextStyle(fontWeight: FontWeight.w700)),
+              icon: Icon(orders.first.isDelivery ? Icons.delivery_dining_rounded : Icons.credit_card_rounded, size: 18),
+              label: Text(!allDone ? 'Đang pha' : orders.first.isDelivery ? 'Giao tài xế' : 'Thanh toán',
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
             )),
             const SizedBox(width: 8),
             Expanded(child: ElevatedButton.icon(

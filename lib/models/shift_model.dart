@@ -16,6 +16,9 @@ class ShiftModel {
   final double cashRevenue;
   final double transferRevenue;
   final double otherRevenue;
+  // Doanh thu đơn app (Grab / ShopeeFood) — app thu tiền, không có trong két.
+  final double grabRevenue;
+  final double shopeeRevenue;
   final int invoiceCount;
 
   // Tiền chi ra / nộp thêm vào két trong ca (mua đá, trả ship, nộp tiền lẻ...).
@@ -36,6 +39,8 @@ class ShiftModel {
     this.cashRevenue = 0,
     this.transferRevenue = 0,
     this.otherRevenue = 0,
+    this.grabRevenue = 0,
+    this.shopeeRevenue = 0,
     this.invoiceCount = 0,
     this.cashIn = 0,
     this.cashOut = 0,
@@ -44,7 +49,8 @@ class ShiftModel {
   });
 
   /// Tổng doanh thu ghi nhận trong ca (mọi hình thức thanh toán).
-  double get totalRevenue => cashRevenue + transferRevenue + otherRevenue;
+  double get totalRevenue =>
+      cashRevenue + transferRevenue + otherRevenue + grabRevenue + shopeeRevenue;
 
   /// Tiền mặt dự kiến còn trong ngăn kéo cuối ca = tiền đầu ca + doanh thu
   /// tiền mặt + tiền nộp thêm − tiền chi ra trong ca.
@@ -71,6 +77,8 @@ class ShiftModel {
       cashRevenue: (data['cashRevenue'] ?? 0).toDouble(),
       transferRevenue: (data['transferRevenue'] ?? 0).toDouble(),
       otherRevenue: (data['otherRevenue'] ?? 0).toDouble(),
+      grabRevenue: (data['grabRevenue'] ?? 0).toDouble(),
+      shopeeRevenue: (data['shopeeRevenue'] ?? 0).toDouble(),
       invoiceCount: (data['invoiceCount'] ?? 0) as int,
       cashIn: (data['cashIn'] ?? 0).toDouble(),
       cashOut: (data['cashOut'] ?? 0).toDouble(),

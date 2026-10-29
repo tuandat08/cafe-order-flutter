@@ -965,8 +965,10 @@ class _OpenShiftStatusCardState extends State<_OpenShiftStatusCard> {
         final cash = (revenue?['cashRevenue'] ?? 0).toDouble();
         final transfer = (revenue?['transferRevenue'] ?? 0).toDouble();
         final other = (revenue?['otherRevenue'] ?? 0).toDouble();
+        final grab = (revenue?['grabRevenue'] ?? 0).toDouble();
+        final shopee = (revenue?['shopeeRevenue'] ?? 0).toDouble();
         final count = (revenue?['invoiceCount'] ?? 0) as int;
-        final total = cash + transfer + other;
+        final total = cash + transfer + other + grab + shopee;
 
         return Card(
       child: Padding(
@@ -1007,6 +1009,8 @@ class _OpenShiftStatusCardState extends State<_OpenShiftStatusCard> {
                       _statRow('Doanh thu tiền mặt', cash, widget.fmt),
                       _statRow('Doanh thu chuyển khoản', transfer, widget.fmt),
                       if (other > 0) _statRow('Khác', other, widget.fmt),
+                      if (grab > 0) _statRow('Doanh thu Grab (không vào két)', grab, widget.fmt),
+                      if (shopee > 0) _statRow('Doanh thu ShopeeFood (không vào két)', shopee, widget.fmt),
                       _statRow('Số hóa đơn', count.toDouble(), widget.fmt, isCount: true),
                       const Divider(height: 20, color: AppColors.divider),
                       _statRow('Tổng doanh thu ca', total, widget.fmt, bold: true),
@@ -1390,6 +1394,8 @@ class _ShiftHistoryTile extends StatelessWidget {
                 _row('Doanh thu tiền mặt', '${fmt.format(shift.cashRevenue)}đ'),
                 _row('Doanh thu chuyển khoản', '${fmt.format(shift.transferRevenue)}đ'),
                 if (shift.otherRevenue > 0) _row('Khác', '${fmt.format(shift.otherRevenue)}đ'),
+                if (shift.grabRevenue > 0) _row('Doanh thu Grab (không vào két)', '${fmt.format(shift.grabRevenue)}đ'),
+                if (shift.shopeeRevenue > 0) _row('Doanh thu ShopeeFood (không vào két)', '${fmt.format(shift.shopeeRevenue)}đ'),
                 _row('Tổng doanh thu', '${fmt.format(shift.totalRevenue)}đ'),
                 _row('Số hóa đơn', '${shift.invoiceCount}'),
                 if (shift.cashIn > 0) _row('Nộp thêm vào két', '+${fmt.format(shift.cashIn)}đ'),

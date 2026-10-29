@@ -27,6 +27,26 @@ class _DashboardBody extends StatelessWidget {
       DateTime(_now.year, _now.month, _now.day),
     );
 
+    // Doanh thu hôm nay = hóa đơn đã ghi nhận (cùng nguồn với Kiểm ca & Báo cáo).
+    // Trước đây đếm đơn status 'paid' — app không còn dùng trạng thái này
+    // (đơn đóng → 'closed') nên doanh thu luôn hiện 0.
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('invoices')
+          .where('createdAt', isGreaterThanOrEqualTo: since)
+          .snapshots(),
+      builder: (context, invSnap) {
+    final invoices = (invSnap.data?.docs ?? const [])
+        .map((d) => d.data())
+        .where((i) => i['status'] != 'superseded' && i['status'] != 'excluded')
+        .toList();
+    final byChannel = <String, double>{
+      OrderChannel.dineIn: 0, OrderChannel.grab: 0, OrderChannel.shopee: 0,
+    };
+    for (final inv in invoices) {
+      final c = OrderChannel.channelOfInvoice(inv);
+      byChannel[c] = (byChannel[c] ?? 0) + (double.tryParse('${inv['totalAmount'] ?? 0}') ?? 0);
+    }
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('orders')
@@ -57,10 +77,9 @@ class _DashboardBody extends StatelessWidget {
                 .toList()
             : <OrderModel>[];
 
-        final paidOrders = orders.where((o) => o.status == 'paid').toList();
-        final activeOrders = orders.where((o) =>
-          o.status != 'paid' && o.status != 'cancelled').toList();
-        final totalRevenue = paidOrders.fold<double>(0, (s, o) => s + o.totalPrice);
+        const activeStatuses = {'pending', 'preparing', 'ready', 'served', 'completed'};
+        final activeOrders = orders.where((o) => activeStatuses.contains(o.status)).toList();
+        final totalRevenue = byChannel.values.fold<double>(0, (s, v) => s + v);
         final currency = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
 
         return RefreshIndicator(
@@ -78,12 +97,19 @@ class _DashboardBody extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
                   child: _StatsRow(
                     revenue: totalRevenue,
-                    paidCount: paidOrders.length,
+                    paidCount: invoices.length,
                     activeCount: activeOrders.length,
                     totalCount: orders.length,
                     currency: currency,
-                    isLoading: snapshot.connectionState == ConnectionState.waiting,
+                    isLoading: snapshot.connectionState == ConnectionState.waiting ||
+                        invSnap.connectionState == ConnectionState.waiting,
                   ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                  child: _ChannelStrip(byChannel: byChannel, currency: currency),
                 ),
               ),
               if (activeOrders.isNotEmpty) ...[
@@ -142,6 +168,42 @@ class _DashboardBody extends StatelessWidget {
         );
       },
     );
+      },
+    );
+  }
+}
+
+// Doanh thu hôm nay theo kênh bán (tại quán / Grab / ShopeeFood)
+class _ChannelStrip extends StatelessWidget {
+  final Map<String, double> byChannel;
+  final NumberFormat currency;
+  const _ChannelStrip({required this.byChannel, required this.currency});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      ('Tại quán / mang về', byChannel[OrderChannel.dineIn] ?? 0, AppColors.primary),
+      ('Grab', byChannel[OrderChannel.grab] ?? 0, const Color(0xFF00B14F)),
+      ('ShopeeFood', byChannel[OrderChannel.shopee] ?? 0, const Color(0xFFEE4D2D)),
+    ];
+    return Wrap(spacing: 8, runSpacing: 8, children: [
+      for (final (label, value, color) in items)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.35)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+            const SizedBox(width: 6),
+            Text('$label: ', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            Text(currency.format(value),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: color)),
+          ]),
+        ),
+    ]);
   }
 }
 
@@ -217,7 +279,7 @@ class _StatsRow extends StatelessWidget {
           bg: AppColors.primarySurface,
         ),
         _StatData(
-          label: 'Đơn đã thanh toán',
+          label: 'Hóa đơn đã thu',
           value: '$paidCount',
           icon: Icons.check_circle_outline_rounded,
           color: AppColors.success,
@@ -347,6 +409,7 @@ class _OrderCard extends StatelessWidget {
     'ready':     ('Sẵn sàng', AppColors.statusReady),
     'served':    ('Đã phục vụ', AppColors.statusServed),
     'paid':      ('Đã thanh toán', AppColors.statusPaid),
+    'completed': ('Đã pha xong', AppColors.statusReady),
     'cancelled': ('Đã huỷ', AppColors.statusCancelled),
   };
 
@@ -380,10 +443,13 @@ class _OrderCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Center(
-                  child: Text(
-                    'B${order.tableId}',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.primary),
-                  ),
+                  child: order.isDelivery
+                      ? Icon(Icons.delivery_dining_rounded, size: 20,
+                          color: order.channel == OrderChannel.grab ? const Color(0xFF00B14F) : const Color(0xFFEE4D2D))
+                      : Text(
+                          'B${order.tableId}',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.primary),
+                        ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -391,7 +457,9 @@ class _OrderCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Đơn #${order.id.substring(0, 6).toUpperCase()}',
+                    Text(order.isDelivery
+                        ? '${OrderChannel.label(order.channel)} #${order.externalOrderCode ?? ''}'
+                        : 'Đơn #${order.id.substring(0, order.id.length < 6 ? order.id.length : 6).toUpperCase()}',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                     Text(timeStr,
                       style: TextStyle(fontSize: 12, color: AppColors.textHint)),
