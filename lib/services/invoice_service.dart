@@ -141,6 +141,8 @@ class InvoiceService {
         if (data['cashReceived'] != null) 'cashReceived': data['cashReceived'],
         if (data['changeGiven'] != null) 'changeGiven': data['changeGiven'],
         if (data['transferConfirmed'] != null) 'transferConfirmed': data['transferConfirmed'],
+        // Mang về trả trước (POS "Gửi & thu tiền") — web hiện nhãn "Trả trước"
+        if (data['prepaid'] == true) 'prepaid': true,
       };
       String resultId;
       if (invoiceId != null && invoiceId.isNotEmpty) {

@@ -701,6 +701,7 @@ class _POSTabState extends State<_POSTab> {
         'totalAmount': total,
         'paymentMethod': res.method,
         'paidAt': true,
+        'prepaid': true,
         if (isCash && res.cashReceived != null) 'cashReceived': res.cashReceived,
         if (isCash && res.cashReceived != null) 'changeGiven': res.cashReceived! - total,
         if (!isCash) 'transferConfirmed': res.transferConfirmed,
